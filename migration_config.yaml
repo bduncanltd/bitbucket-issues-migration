@@ -1,0 +1,11 @@
+# Bitbucket to Jira migration configuration.
+# DO NOT COMMIT UPDATES TO THIS FILE - it contains a secret API token.
+
+bitbucket:
+  export-zip: "your_bitbucket_export-issues.zip"
+
+jira:
+  url: "https://your-site.atlassian.net/"
+  email: "your-email@hello-world.com"
+  api-token: "your-api-token-here"
+  board-id: "FOO"

@@ -1,0 +1,17 @@
+{
+    // Python
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll": "never"
+        }
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "ruff.organizeImports": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "editor.rulers": [120]
+}
