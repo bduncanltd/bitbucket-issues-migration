@@ -12,13 +12,13 @@ Do NOT commit this file — it contains a secret API token.
 
 Usage:
     # Save Bitbucket browser session once (opens Chrome for you to log in):
-    python bitbucket_to_jira_migration.py --config migration_config.yaml --prepare-auth
+    python migrate_bitbucket_to_jira.py --config migration_config.yaml --prepare-auth
 
     # Migrate all issues (with inline image download using saved session):
-    python bitbucket_to_jira_migration.py --config migration_config.yaml
+    python migrate_bitbucket_to_jira.py --config migration_config.yaml
 
     # Migrate first N issues only:
-    python bitbucket_to_jira_migration.py --config migration_config.yaml --limit 3
+    python migrate_bitbucket_to_jira.py --config migration_config.yaml --limit 3
 """
 
 import argparse
