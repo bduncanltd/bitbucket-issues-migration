@@ -3,10 +3,10 @@
 2. Updates the component field of every Jira issue that has a component in the export.
 
 Usage:
-    python migrate_components.py --config migration_config.yaml
+    python migrate_bitbucket_components_to_jira.py --config migration_config.yaml
 
     # Dry-run (log actions without making any changes):
-    python migrate_components.py --config migration_config.yaml --dry-run
+    python migrate_bitbucket_components_to_jira.py --config migration_config.yaml --dry-run
 """
 
 from __future__ import annotations
