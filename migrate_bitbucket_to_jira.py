@@ -7,8 +7,7 @@ Requirements:
     - pyyaml
     - playwright (for inline image download; run `playwright install chromium` after installing)
 
-Create a migration_config.yaml file (see migration_config.yaml for the structure).
-Do NOT commit this file — it contains a secret API token.
+Create a migration_config.yaml file by copying migration_config.example.yaml and filling in your values.
 
 Usage:
     # Save Bitbucket browser session once (opens Chrome for you to log in):

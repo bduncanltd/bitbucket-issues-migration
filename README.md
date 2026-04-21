@@ -34,12 +34,13 @@ The `playwright install chromium` step downloads the Chromium browser used to au
 
 ## Configuration
 
-Fill in `migration_config.yaml` (already committed as a template — keep your local changes from being committed by running):
+Copy the template to create your local config file (which is gitignored to prevent accidental secret commits):
 
 ```bash
-git update-index --skip-worktree migration_config.yaml
+cp migration_config.example.yaml migration_config.yaml
 ```
 
+Then fill in `migration_config.yaml` with your values:
 
 ```yaml
 bitbucket:

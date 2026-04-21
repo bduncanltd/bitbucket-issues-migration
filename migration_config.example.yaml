@@ -1,5 +1,6 @@
-# Bitbucket to Jira migration configuration.
-# DO NOT COMMIT UPDATES TO THIS FILE - it contains a secret API token.
+# Bitbucket to Jira migration configuration template.
+# Copy this file to migration_config.yaml and fill in your values.
+# migration_config.yaml is gitignored to prevent accidental secret commits.
 
 bitbucket:
   export-zip: "your_bitbucket_export-issues.zip"
