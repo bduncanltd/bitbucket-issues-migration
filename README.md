@@ -4,6 +4,8 @@ Scripts for migrating Bitbucket issues to a Jira Cloud project.
 
 > **Disclaimer:** These scripts were generated with AI assistance. They have been tested on a real migration, but may not handle every edge case. Review the configuration and mappings carefully before running against a production Jira project, and use at your own risk.
 
+> **Maintenance notice:** This repository is **not actively maintained**. It is shared as a starting point — feel free to use it as a base, adapt it with AI assistance for your own repository's structure, and open questions in the Issues tab if you get stuck.
+
 ## Overview
 
 Two scripts are provided:
