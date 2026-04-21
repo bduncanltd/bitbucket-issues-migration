@@ -1,5 +1,7 @@
 # Bitbucket Issues Migration
 
+[![CI](https://github.com/bduncanltd/bitbucket-issues-migration/actions/workflows/ci.yml/badge.svg)](https://github.com/bduncanltd/bitbucket-issues-migration/actions/workflows/ci.yml)
+
 Scripts for migrating Bitbucket issues to a Jira Cloud project.
 
 > **Disclaimer:** These scripts were generated with AI assistance. They have been tested on a real migration, but may not handle every edge case. Review the configuration and mappings carefully before running against a production Jira project, and use at your own risk.

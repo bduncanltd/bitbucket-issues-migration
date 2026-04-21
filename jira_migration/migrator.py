@@ -90,16 +90,8 @@ def _get_description(bb_issue: BitbucketIssue, display_names: dict[str, str]) ->
         if separator:
             raw = imported_body.strip()
 
-    assignee = (
-        display_names.get(bb_issue.assignee, bb_issue.assignee)
-        if bb_issue.assignee
-        else "N/A"
-    )
-    reporter = (
-        display_names.get(bb_issue.reporter, bb_issue.reporter)
-        if bb_issue.reporter
-        else "N/A"
-    )
+    assignee = display_names.get(bb_issue.assignee, bb_issue.assignee) if bb_issue.assignee else "N/A"
+    reporter = display_names.get(bb_issue.reporter, bb_issue.reporter) if bb_issue.reporter else "N/A"
     header = (
         "_"
         f"Issue imported from Bitbucket. "
@@ -124,9 +116,7 @@ def _get_comment_body(bb_comment: dict[str, str], display_names: dict[str, str])
 
 
 class BitbucketJiraMigrator:
-    def __init__(
-        self, export: BitbucketExport, jira: JiraImport, config: JiraMigrationConfig
-    ) -> None:
+    def __init__(self, export: BitbucketExport, jira: JiraImport, config: JiraMigrationConfig) -> None:
         self._export = export
         self._jira = jira
         self._config = config
@@ -163,15 +153,10 @@ class BitbucketJiraMigrator:
         self._log_unmapped_users()
         self._jira.log_user_details(self.valid_user_ids)
 
-        issues = self._export.issues[
-            from_issue - 1 : from_issue - 1 + limit if limit is not None else None
-        ]
+        issues = self._export.issues[from_issue - 1 : from_issue - 1 + limit if limit is not None else None]
         total = len(self._export.issues)
         for i, bb_issue in enumerate(issues, start=from_issue):
-            comments = [
-                _get_comment_body(comment, self._export.user_display_names)
-                for comment in bb_issue.comments
-            ]
+            comments = [_get_comment_body(comment, self._export.user_display_names) for comment in bb_issue.comments]
 
             jira_issue_details = JiraIssueDetails(
                 key=f"{self._config.board_id}-{bb_issue.id}",
@@ -194,12 +179,9 @@ class BitbucketJiraMigrator:
                 jira_issue = self._jira.create_issue(jira_issue_details)
 
             # Upload inline images and replace URLs with filenames before writing
-            jira_issue_details.description = self._jira.upload_inline_images(
-                jira_issue, jira_issue_details.description
-            )
+            jira_issue_details.description = self._jira.upload_inline_images(jira_issue, jira_issue_details.description)
             jira_issue_details.comments = [
-                self._jira.upload_inline_images(jira_issue, c)
-                for c in jira_issue_details.comments
+                self._jira.upload_inline_images(jira_issue, c) for c in jira_issue_details.comments
             ]
 
             try:

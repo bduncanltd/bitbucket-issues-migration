@@ -36,9 +36,7 @@ def _load_db1(extract_dir: Path) -> dict:
     return json.loads((extract_dir / "db-1.0.json").read_text(encoding="utf-8"))
 
 
-def _load_attachment_map(
-    db1: dict, extract_dir: Path
-) -> dict[int, list[BitbucketAttachment]]:
+def _load_attachment_map(db1: dict, extract_dir: Path) -> dict[int, list[BitbucketAttachment]]:
     """Build a map of issue_id → list of attachments from db-1.0.json."""
     result: dict[int, list[BitbucketAttachment]] = {}
     for entry in db1.get("attachments", []):
@@ -51,15 +49,9 @@ def _load_attachment_map(
 
 def _build_display_name_map(db1: dict, raw_issues: list[dict]) -> dict[str, str]:
     """Build account_id → username map by correlating db-1.0.json with db-jira-cloud.json."""
-    ts_to_user: dict[str, str] = {
-        c["created_on"]: c["user"] for c in db1.get("comments", [])
-    }
-    id_to_reporter: dict[int, str] = {
-        i["id"]: i["reporter"] for i in db1.get("issues", []) if i.get("reporter")
-    }
-    id_to_assignee: dict[int, str] = {
-        i["id"]: i["assignee"] for i in db1.get("issues", []) if i.get("assignee")
-    }
+    ts_to_user: dict[str, str] = {c["created_on"]: c["user"] for c in db1.get("comments", [])}
+    id_to_reporter: dict[int, str] = {i["id"]: i["reporter"] for i in db1.get("issues", []) if i.get("reporter")}
+    id_to_assignee: dict[int, str] = {i["id"]: i["assignee"] for i in db1.get("issues", []) if i.get("assignee")}
 
     result: dict[str, str] = {}
     for issue in raw_issues:
@@ -71,11 +63,7 @@ def _build_display_name_map(db1: dict, raw_issues: list[dict]) -> dict[str, str]
             if (assignee := issue.get("assignee")) and issue_id in id_to_assignee:
                 result[assignee] = id_to_assignee[issue_id]
         for comment in issue.get("comments", []):
-            if (
-                (author := comment.get("author"))
-                and (ts := comment.get("created"))
-                and ts in ts_to_user
-            ):
+            if (author := comment.get("author")) and (ts := comment.get("created")) and ts in ts_to_user:
                 result[author] = ts_to_user[ts]
     return result
 
@@ -84,11 +72,7 @@ class BitbucketExport:
     def __init__(self, zip_path: str) -> None:
         extract_dir = _extract_zip(zip_path)
 
-        bb_export = json.loads(
-            _find_export_json(extract_dir, "db-jira-cloud.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        bb_export = json.loads(_find_export_json(extract_dir, "db-jira-cloud.json").read_text(encoding="utf-8"))
         projects = bb_export["projects"]
         assert isinstance(projects, list)
         assert len(projects) == 1

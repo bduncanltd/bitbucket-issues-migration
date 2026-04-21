@@ -41,13 +41,9 @@ def extract_zip(zip_path: str) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Migrate Bitbucket components to Jira."
-    )
+    parser = argparse.ArgumentParser(description="Migrate Bitbucket components to Jira.")
     parser.add_argument("--config", required=True, help="Path to migration_config.yaml")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Log actions without making any changes"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Log actions without making any changes")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -58,17 +54,11 @@ def main() -> None:
     db1: dict = json.loads((extract_dir / "db-1.0.json").read_text(encoding="utf-8"))
 
     id_to_component: dict[int, str] = {
-        issue["id"]: issue["component"]
-        for issue in db1.get("issues", [])
-        if issue.get("component")
+        issue["id"]: issue["component"] for issue in db1.get("issues", []) if issue.get("component")
     }
-    all_components = set(id_to_component.values()) | {
-        c["name"] for c in db1.get("components", [])
-    }
+    all_components = set(id_to_component.values()) | {c["name"] for c in db1.get("components", [])}
 
-    client = JIRA(
-        server=jira_cfg["url"], basic_auth=(jira_cfg["email"], jira_cfg["api-token"])
-    )
+    client = JIRA(server=jira_cfg["url"], basic_auth=(jira_cfg["email"], jira_cfg["api-token"]))
 
     existing_components = {c.name for c in client.project_components(project)}
     for name in sorted(all_components):
@@ -81,9 +71,7 @@ def main() -> None:
         issue_key = f"{project}-{issue_id}"
         logging.info("%s -> %s", issue_key, component_name)
         if not args.dry_run:
-            client.issue(issue_key).update(
-                fields={"components": [{"name": component_name}]}
-            )
+            client.issue(issue_key).update(fields={"components": [{"name": component_name}]})
 
 
 if __name__ == "__main__":

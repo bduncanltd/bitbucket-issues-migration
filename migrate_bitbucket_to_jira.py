@@ -44,9 +44,7 @@ if __name__ == "__main__":
         required=True,
         help="Path to the migration YAML config file.",
     )
-    parser.add_argument(
-        "--limit", type=int, default=None, help="Only migrate the first N issues."
-    )
+    parser.add_argument("--limit", type=int, default=None, help="Only migrate the first N issues.")
     parser.add_argument(
         "--from-issue",
         type=int,
@@ -94,7 +92,5 @@ if __name__ == "__main__":
         bitbucket_export = BitbucketExport(config.export_zip)
         jira_import = JiraImport(config, auth_state=auth_state)
 
-        migrator = BitbucketJiraMigrator(
-            export=bitbucket_export, jira=jira_import, config=config
-        )
+        migrator = BitbucketJiraMigrator(export=bitbucket_export, jira=jira_import, config=config)
         migrator.migrate(limit=args.limit, from_issue=args.from_issue)

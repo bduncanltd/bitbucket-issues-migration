@@ -12,7 +12,8 @@ from urllib.parse import urlparse
 from jira import JIRA
 from jira.exceptions import JIRAError
 from jira.resources import Comment, Issue, User
-from playwright.sync_api import Error as PlaywrightError, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import sync_playwright
 
 from jira_migration.config import JiraMigrationConfig
 from jira_migration.jira_issue_details import JiraIssueDetails
@@ -24,9 +25,7 @@ RESPONSE_404 = 404
 
 
 class JiraImport:
-    def __init__(
-        self, config: JiraMigrationConfig, auth_state: Path | None = None
-    ) -> None:
+    def __init__(self, config: JiraMigrationConfig, auth_state: Path | None = None) -> None:
         self._config = config
         self._auth_state = auth_state
         self._client = JIRA(
@@ -128,14 +127,10 @@ class JiraImport:
         image_dir = Path(".migration/images")
         image_dir.mkdir(parents=True, exist_ok=True)
 
-        existing_names = {
-            a.filename for a in self._client.issue(jira_issue.key).fields.attachment
-        }
+        existing_names = {a.filename for a in self._client.issue(jira_issue.key).fields.attachment}
 
         with sync_playwright() as playwright:
-            request_context = playwright.request.new_context(
-                storage_state=str(self._auth_state)
-            )
+            request_context = playwright.request.new_context(storage_state=str(self._auth_state))
             try:
 
                 def replace(m: re.Match[str]) -> str:
@@ -147,13 +142,9 @@ class JiraImport:
                         logging.info("  Downloading image: %s", filename)
 
                         try:
-                            response = request_context.get(
-                                url, fail_on_status_code=False, timeout=30_000
-                            )
+                            response = request_context.get(url, fail_on_status_code=False, timeout=30_000)
                         except PlaywrightError as e:
-                            logging.warning(
-                                "  TLS/connection failed for %s: %s", url, e
-                            )
+                            logging.warning("  TLS/connection failed for %s: %s", url, e)
                             return m.group(0)  # leave original !url!
                         except Exception as e:
                             logging.warning("  Unexpected error for %s: %s", url, e)
@@ -172,9 +163,7 @@ class JiraImport:
                     if filename not in existing_names:
                         logging.info("  Uploading image: %s", filename)
                         with open(local_path, "rb") as f:
-                            self._client.add_attachment(
-                                issue=jira_issue, attachment=f, filename=filename
-                            )
+                            self._client.add_attachment(issue=jira_issue, attachment=f, filename=filename)
                         existing_names.add(filename)
 
                     return f"!{filename}!"
@@ -185,18 +174,14 @@ class JiraImport:
 
     def sync_attachments(self, jira_issue: Issue, attachments: list) -> None:
         """Upload attachments that aren't already on the Jira issue (matched by filename)."""
-        existing_names = {
-            a.filename for a in self._client.issue(jira_issue.key).fields.attachment
-        }
+        existing_names = {a.filename for a in self._client.issue(jira_issue.key).fields.attachment}
         for attachment in attachments:
             if attachment.filename in existing_names:
                 logging.info("  Attachment already exists: %s", attachment.filename)
                 continue
             logging.info("  Uploading attachment: %s", attachment.filename)
             with open(attachment.path, "rb") as f:
-                self._client.add_attachment(
-                    issue=jira_issue, attachment=f, filename=attachment.filename
-                )
+                self._client.add_attachment(issue=jira_issue, attachment=f, filename=attachment.filename)
 
     def update_issue(self, existing: Issue, details: JiraIssueDetails) -> None:
         try:
