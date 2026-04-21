@@ -12,8 +12,7 @@ from urllib.parse import urlparse
 from jira import JIRA
 from jira.exceptions import JIRAError
 from jira.resources import Comment, Issue, User
-from playwright._impl._errors import Error as PlaywrightError
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 from jira_migration.config import JiraMigrationConfig
 from jira_migration.jira_issue_details import JiraIssueDetails
@@ -39,7 +38,8 @@ class JiraImport:
         self.known_user_ids: set[str] = set()
         for group in self._client.groups():
             for user in self._client.group_members(group):
-                self.known_user_ids.add(user)
+                if user.accountId:
+                    self.known_user_ids.add(user.accountId)
         logging.info("Found %d known Jira users.", len(self.known_user_ids))
 
     def assert_project_exists(self) -> None:

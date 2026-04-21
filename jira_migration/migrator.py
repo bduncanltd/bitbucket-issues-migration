@@ -86,7 +86,9 @@ def _get_priority_id(priority: str) -> str:
 def _get_description(bb_issue: BitbucketIssue, display_names: dict[str, str]) -> str:
     raw = bb_issue.description
     if raw.startswith("Imported from "):
-        raw = raw.split("\n", 1)[1].strip()
+        _, separator, imported_body = raw.partition("\n")
+        if separator:
+            raw = imported_body.strip()
 
     assignee = (
         display_names.get(bb_issue.assignee, bb_issue.assignee)

@@ -13,7 +13,7 @@ Two scripts are provided:
 - **`migrate_bitbucket_to_jira.py`** — Migrates issues (with comments, attachments, and inline images) from a Bitbucket export zip into Jira.
 - **`migrate_bitbucket_components_to_jira.py`** — Creates Jira components from the Bitbucket export and assigns them to the migrated issues.
 
-The migration is **idempotent** — re-running it will update existing issues rather than create duplicates, so it is safe to run multiple times or resume from a specific issue.
+Re-running the migration will often update existing issues rather than create duplicates, which can help when resuming from a specific issue. However, the migration is **not fully idempotent**: comment synchronization may delete previously synced or other "leftover" Jira comments, so review results carefully and do not assume re-runs are risk-free.
 
 ---
 
