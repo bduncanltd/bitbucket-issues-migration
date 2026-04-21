@@ -10,6 +10,15 @@ Scripts for migrating Bitbucket issues to a Jira Cloud project.
 
 ## Overview
 
+Two tools are provided:
+
+- **[Bitbucket Issue Exporter](export_archive/README.md)** — Converts a Bitbucket Issues export into a static HTML archive for offline browsing or hosting (e.g. GitHub Pages).
+- **Jira Migration Scripts** — Migrates Bitbucket issues into a Jira Cloud project (see below).
+
+---
+
+## Jira Migration Scripts
+
 Two scripts are provided:
 
 - **`migrate_bitbucket_to_jira.py`** — Migrates issues (with comments, attachments, and inline images) from a Bitbucket export zip into Jira.
