@@ -1,0 +1,4 @@
+colorlog
+jira
+playwright
+pyyaml
