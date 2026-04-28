@@ -37,8 +37,7 @@ class JiraImport:
         self.known_user_ids: set[str] = set()
         for group in self._client.groups():
             for user in self._client.group_members(group):
-                if user.accountId:
-                    self.known_user_ids.add(user.accountId)
+                self.known_user_ids.add(user)
         logging.info("Found %d known Jira users.", len(self.known_user_ids))
 
     def assert_project_exists(self) -> None:
