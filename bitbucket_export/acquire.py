@@ -353,13 +353,15 @@ def _download_attachments(
     if not wanted:
         return
 
-    print(f"Downloading {len(wanted)} attachments ...", flush=True)
-    for attachment, referenced_by in wanted:
+    total = len(wanted)
+    print(f"Downloading {total} attachments ...", flush=True)
+    for index, (attachment, referenced_by) in enumerate(wanted, start=1):
         url = attachment.source_url
         try:
             body = client.fetch_bytes(url)
         except BitbucketApiError as error:
             store.mark_unresolved(url, str(error), ORIGIN_ATTACHMENT, referenced_by)
+            print(f"  [{index}/{total}] {attachment.filename} ({referenced_by}): FAILED ({error})", flush=True)
             continue
         asset = store.add_bytes(
             body=body,
@@ -368,6 +370,7 @@ def _download_attachments(
             origin=ORIGIN_ATTACHMENT,
         )
         attachment.asset_id = asset.id
+        print(f"  [{index}/{total}] {attachment.filename} ({referenced_by}): ok, {len(body)} bytes", flush=True)
 
 
 def _discover_inline_images(archive: Archive) -> dict[str, str]:
