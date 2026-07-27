@@ -10,6 +10,18 @@ _NOFORMAT = "{noformat}"
 _BOLD_PLACEHOLDER = "\x00B\x00"
 
 
+def convert_content(text: str, markup_type: str) -> str:
+    """Convert authored text to Jira wiki markup, honouring the syntax it was written in.
+
+    Only markdown is converted. Creole and plaintext are wrapped verbatim in
+    ``{noformat}`` — lossless, and never garbled by being parsed as a syntax they were
+    not written in.
+    """
+    if markup_type in ("", "markdown"):
+        return convert(text)
+    return f"{_NOFORMAT}\n{text}\n{_NOFORMAT}"
+
+
 def convert(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = _convert_fenced_code_blocks(text)

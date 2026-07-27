@@ -1,6 +1,8 @@
-"""Reads a Bitbucket export zip and:
+"""Reads a Bitbucket issue archive and:
 1. Creates Jira components (if they don't already exist) on the target project.
-2. Updates the component field of every Jira issue that has a component in the export.
+2. Updates the component field of every Jira issue that has a component in the archive.
+
+The archive is created by: python -m bitbucket_export workspace/repo
 
 Usage:
     python migrate_bitbucket_components_to_jira.py --config migration_config.yaml
@@ -12,10 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import shutil
-import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -23,21 +22,13 @@ import colorlog
 import yaml
 from jira import JIRA
 
+from bitbucket_export.model import Archive
+
 
 def load_config(path: str) -> dict[str, Any]:
     with open(path, encoding="utf-8") as f:
         result: dict[str, Any] = yaml.safe_load(f)
         return result
-
-
-def extract_zip(zip_path: str) -> Path:
-    extract_dir = Path(".migration") / Path(zip_path).stem
-    if extract_dir.exists():
-        shutil.rmtree(extract_dir)
-    extract_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(extract_dir)
-    return extract_dir
 
 
 def main() -> None:
@@ -50,13 +41,16 @@ def main() -> None:
     jira_cfg = config["jira"]
     project: str = jira_cfg["board-id"]
 
-    extract_dir = extract_zip(config["bitbucket"]["export-zip"])
-    db1: dict = json.loads((extract_dir / "db-1.0.json").read_text(encoding="utf-8"))
+    try:
+        archive = Archive.load(Path(config["bitbucket"]["archive-dir"]))
+    # FileNotFoundError: no manifest; ValueError: archive written by an unsupported schema.
+    except (FileNotFoundError, ValueError) as error:
+        logging.error("%s\nCreate the archive first: python -m bitbucket_export <workspace/repo>", error)
+        raise SystemExit(1) from error
 
-    id_to_component: dict[int, str] = {
-        issue["id"]: issue["component"] for issue in db1.get("issues", []) if issue.get("component")
-    }
-    all_components = set(id_to_component.values()) | {c["name"] for c in db1.get("components", [])}
+    id_to_component: dict[int, str] = {issue.id: issue.component for issue in archive.issues if issue.component}
+    # The manifest keeps component definitions even when no issue uses them.
+    all_components = set(id_to_component.values()) | {c.name for c in archive.components}
 
     client = JIRA(server=jira_cfg["url"], basic_auth=(jira_cfg["email"], jira_cfg["api-token"]))
 

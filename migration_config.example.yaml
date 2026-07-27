@@ -3,7 +3,8 @@
 # migration_config.yaml is gitignored to prevent accidental secret commits.
 
 bitbucket:
-  export-zip: "your_bitbucket_export-issues.zip"
+  # Archive created by: python -m bitbucket_export workspace/repo
+  archive-dir: ".archive/workspace/repo"
 
 jira:
   url: "https://your-site.atlassian.net/"
