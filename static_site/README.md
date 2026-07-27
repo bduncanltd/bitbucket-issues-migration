@@ -3,8 +3,11 @@
 Turns a Bitbucket issue archive into a static HTML site.
 
 ```bash
-python -m static_site ./my-archive ./my-site
+python -m static_site .archive/workspace/repo
 ```
+
+The site lands in `.site/<workspace>/<repo>`, mirroring the archive layout; pass a
+second argument to write somewhere else.
 
 Reads the archive and nothing else — no network, no credentials. Regenerating after a
 template or CSS change takes seconds and can be repeated as often as you like, because

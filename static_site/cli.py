@@ -15,6 +15,8 @@ from bitbucket_export.model import Archive
 
 from .site import MissingAssetError, render_site
 
+DEFAULT_SITE_ROOT = Path(".site")
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -22,7 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="Generate a static HTML site from a Bitbucket issue archive.",
     )
     parser.add_argument("archive_dir", type=Path, help="Archive directory containing manifest.json.")
-    parser.add_argument("output_dir", type=Path, help="Where to write the site.")
+    parser.add_argument(
+        "output_dir",
+        type=Path,
+        nargs="?",
+        default=None,
+        help="Where to write the site. Defaults to .site/<workspace>/<repo>, mirroring the archive layout.",
+    )
     parser.add_argument(
         "--allow-missing-assets",
         action="store_true",
@@ -40,8 +48,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(str(error), file=sys.stderr)
         return 1
 
+    repository = archive.repository
+    output_dir = args.output_dir or DEFAULT_SITE_ROOT / repository.workspace / repository.slug
+
     try:
-        result = render_site(archive, args.output_dir, args.archive_dir, allow_missing_assets=args.allow_missing_assets)
+        result = render_site(archive, output_dir, args.archive_dir, allow_missing_assets=args.allow_missing_assets)
     except MissingAssetError as error:
         print(str(error), file=sys.stderr)
         return 1

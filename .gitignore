@@ -216,5 +216,6 @@ __marimo__/
 # Bitbucket export zips (large, and often contain private issue data)
 *-issues.zip
 
-# Default archive output location
+# Default archive and site output locations
 .archive/
+.site/

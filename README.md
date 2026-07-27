@@ -27,11 +27,12 @@ archive directly from a Bitbucket admin export zip, is kept for reference. The
 ```bash
 python -m bitbucket_export --prepare-auth                          # once
 python -m bitbucket_export workspace/repo --email you@example.com  # export
-python -m static_site .archive/workspace/repo ./my-site            # publish
+python -m static_site .archive/workspace/repo                      # publish
 ```
 
-The export lands in `.archive/<workspace>/<repo>`. Set `$BITBUCKET_EMAIL` and it
-shortens to `python -m bitbucket_export workspace/repo`.
+The export lands in `.archive/<workspace>/<repo>` and the site in
+`.site/<workspace>/<repo>`. Set `$BITBUCKET_EMAIL` and the export shortens to
+`python -m bitbucket_export workspace/repo`.
 
 The exporter is the only step that touches the network, and it gets everything in one
 pass into a self-describing archive: one JSON file per issue under `issues/`, plus a

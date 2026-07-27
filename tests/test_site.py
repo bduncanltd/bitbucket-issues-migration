@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from bitbucket_export.model import Archive, Asset, Content, Issue, Repository
+from static_site.cli import main
 from static_site.site import MissingAssetError, render_site
 
 DIGEST = "b" * 64
@@ -50,6 +51,17 @@ def test_missing_asset_file_aborts_before_writing_anything(tmp_path):
         render_site(_archive(), output_dir, archive_dir)
 
     assert not output_dir.exists()
+
+
+def test_cli_defaults_output_to_site_dir_mirroring_the_archive(tmp_path, monkeypatch):
+    archive_dir = tmp_path / "archive"
+    (archive_dir / ASSET_PATH).parent.mkdir(parents=True)
+    (archive_dir / ASSET_PATH).write_bytes(b"png-bytes")
+    _archive().save(archive_dir)
+    monkeypatch.chdir(tmp_path)
+
+    assert main([str(archive_dir)]) == 0
+    assert (tmp_path / ".site" / "ws" / "repo" / "index.html").exists()
 
 
 def test_allow_missing_assets_renders_and_reports_the_gap(tmp_path):
