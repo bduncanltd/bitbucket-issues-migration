@@ -8,6 +8,7 @@ website, a Jira import, or a search index is somebody else's job.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from collections.abc import Sequence
@@ -34,6 +35,13 @@ from .model import Repository
 DEFAULT_TOKEN_FILENAME = "BITBUCKET_API_TOKEN"
 DEFAULT_ARCHIVE_ROOT = Path(".archive")
 MIN_REPO_PARTS = 2
+
+
+def configure_logging() -> None:
+    """Send log output to stdout as bare lines, like a normal CLI tool."""
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+
 
 EPILOG = """
 examples:
@@ -118,6 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
@@ -125,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             prepare_auth(auth_state_path=args.auth_state, login_url=args.login_url, channel=args.channel)
         except InlineImageSessionError as error:
-            print(str(error), file=sys.stderr)
+            logging.error(str(error))
             return 1
         return 0
 
@@ -158,12 +167,12 @@ def _run_export(args: argparse.Namespace) -> int:
     try:
         repository, token = _resolve_credentials(args)
     except (ValueError, OSError) as error:
-        print(str(error), file=sys.stderr)
+        logging.error(str(error))
         return 1
 
     archive_dir = default_archive_dir(repository)
     log_path = default_migration_log_path(archive_dir)
-    print(f"Archiving {repository.full_name} into {archive_dir}", flush=True)
+    logging.info(f"Archiving {repository.full_name} into {archive_dir}")
 
     options = AcquireOptions(
         archive_dir=archive_dir,
@@ -184,6 +193,8 @@ def _run_export(args: argparse.Namespace) -> int:
     except (InlineImageSessionError, BitbucketApiError) as error:
         return _fail(log_path, revision_line, str(error))
 
+    # The summary is the run's actual output, not narration about it — print, so it
+    # stays even if a host application reconfigures logging.
     summary = [revision_line, *result.summary]
     for line in summary:
         print(line)
@@ -191,10 +202,9 @@ def _run_export(args: argparse.Namespace) -> int:
 
     incomplete = result.failed_images + result.failed_attachments
     if incomplete and not args.allow_missing_images:
-        print(
-            f"\n{incomplete} asset(s) could not be downloaded; see unresolved_assets in the manifest.\n"
-            "Re-run to retry just those, or pass --allow-missing-images to accept the archive as-is.",
-            file=sys.stderr,
+        logging.error(
+            f"{incomplete} asset(s) could not be downloaded; see unresolved_assets in the manifest.\n"
+            "Re-run to retry just those, or pass --allow-missing-images to accept the archive as-is."
         )
         return 1
     return 0
@@ -234,6 +244,6 @@ def _resolve_credentials(args: argparse.Namespace) -> tuple[Repository, str]:
 
 
 def _fail(log_path: Path | None, revision_line: str, message: str) -> int:
-    print(message, file=sys.stderr)
+    logging.error(message)
     append_migration_log(log_path, [sys.executable, *sys.argv], [revision_line, message], status="failed")
     return 1

@@ -20,6 +20,7 @@ full traversal of the tracker.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -105,22 +106,22 @@ def acquire(client: BitbucketClient, options: AcquireOptions) -> AcquireResult:
     issues_by_id: dict[int, Issue] = {issue.id: issue for issue in previous.issues} if previous else {}
     users: dict[str, User] = dict(previous.users) if previous else {}
 
-    print(f"Listing issues in {options.repository.full_name} ...", flush=True)
+    logging.info(f"Listing issues in {options.repository.full_name} ...")
     raw_issues = _select_issues(client, options)
 
     stale = _issues_needing_fetch(raw_issues, issues_by_id, previous, options)
     reused = len(raw_issues) - len(stale)
     if reused:
-        print(f"Found {len(raw_issues)} issues; {reused} unchanged since last run, fetching {len(stale)}.", flush=True)
+        logging.info(f"Found {len(raw_issues)} issues; {reused} unchanged since last run, fetching {len(stale)}.")
     else:
-        print(f"Found {len(raw_issues)} issues; fetching comments, history, and attachments ...", flush=True)
+        logging.info(f"Found {len(raw_issues)} issues; fetching comments, history, and attachments ...")
 
     pending_attachments: list[tuple[Attachment, str]] = []
     total = len(stale)
 
     for index, raw_issue in enumerate(stale, start=1):
         issue_id = raw_issue["id"]
-        print(f"  [{index}/{total}] issue #{issue_id}: {raw_issue.get('title') or ''}", flush=True)
+        logging.info(f"  [{index}/{total}] issue #{issue_id}: {raw_issue.get('title') or ''}")
         issues_by_id[issue_id] = _build_issue(client, raw_issue, options.repository, users)
 
     # Attachments come from every issue in the archive, not just the re-fetched ones, so
@@ -203,10 +204,9 @@ def _issues_needing_fetch(
     # disk can supply them, so they have to be fetched again.
     outdated = previous is not None and previous.schema_version < SCHEMA_VERSION
     if outdated:
-        print(
+        logging.info(
             f"Archive was written by schema v{previous.schema_version}; "
-            f"re-fetching all issues to capture fields added in v{SCHEMA_VERSION}.",
-            flush=True,
+            f"re-fetching all issues to capture fields added in v{SCHEMA_VERSION}."
         )
 
     # Ids the user named with --issue-id are always fetched. Forcing one issue is the
@@ -354,14 +354,14 @@ def _download_attachments(
         return
 
     total = len(wanted)
-    print(f"Downloading {total} attachments ...", flush=True)
+    logging.info(f"Downloading {total} attachments ...")
     for index, (attachment, referenced_by) in enumerate(wanted, start=1):
         url = attachment.source_url
         try:
             body = client.fetch_bytes(url)
         except BitbucketApiError as error:
             store.mark_unresolved(url, str(error), ORIGIN_ATTACHMENT, referenced_by)
-            print(f"  [{index}/{total}] {attachment.filename} ({referenced_by}): FAILED ({error})", flush=True)
+            logging.warning(f"  [{index}/{total}] {attachment.filename} ({referenced_by}): FAILED ({error})")
             continue
         asset = store.add_bytes(
             body=body,
@@ -370,7 +370,7 @@ def _download_attachments(
             origin=ORIGIN_ATTACHMENT,
         )
         attachment.asset_id = asset.id
-        print(f"  [{index}/{total}] {attachment.filename} ({referenced_by}): ok, {len(body)} bytes", flush=True)
+        logging.info(f"  [{index}/{total}] {attachment.filename} ({referenced_by}): ok, {len(body)} bytes")
 
 
 def _discover_inline_images(archive: Archive) -> dict[str, str]:
@@ -396,7 +396,7 @@ def _skip_inline_images(store: AssetStore, referenced_by: dict[str, str]) -> int
         store.mark_unresolved(url, "inline image fetching was skipped", ORIGIN_INLINE_IMAGE, location)
         skipped += 1
     if skipped:
-        print(f"Inline images: {skipped} referenced but not fetched (--skip-inline-images).", flush=True)
+        logging.info(f"Inline images: {skipped} referenced but not fetched (--skip-inline-images).")
     return skipped
 
 
@@ -410,17 +410,20 @@ def _download_inline_images(
 
     wanted = [url for url in referenced_by if not store.has_url(url)]
     if not wanted:
-        print(f"Inline images: {len(referenced_by)} referenced, all already stored.", flush=True)
+        logging.info(f"Inline images: {len(referenced_by)} referenced, all already stored.")
         return 0
 
-    print(f"Inline images: {len(referenced_by)} referenced, fetching {len(wanted)} ...", flush=True)
+    logging.info(f"Inline images: {len(referenced_by)} referenced, fetching {len(wanted)} ...")
     completed = 0
 
     def report(result) -> None:
         nonlocal completed
         completed += 1
-        state = "ok" if result.ok else f"FAILED ({result.error})"
-        print(f"  [{completed}/{len(wanted)}] {derive_url_filename(result.url)}: {state}", flush=True)
+        line = f"  [{completed}/{len(wanted)}] {derive_url_filename(result.url)}"
+        if result.ok:
+            logging.info(f"{line}: ok")
+        else:
+            logging.warning(f"{line}: FAILED ({result.error})")
 
     results = fetch_images(
         urls=wanted,
@@ -487,7 +490,7 @@ def _fetch_definitions(client: BitbucketClient, archive: Archive) -> None:
         except BitbucketApiError as error:
             # A tracker with a feature disabled returns an error rather than an empty
             # list; that is not a reason to fail the export.
-            print(f"Warning: could not list {path}: {error}", flush=True)
+            logging.warning(f"Could not list {path}: {error}")
         target.sort(key=lambda entry: entry.name.lower())
 
 

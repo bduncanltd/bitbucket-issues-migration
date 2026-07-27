@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -118,7 +119,7 @@ def verify_session_live(auth_state_path: Path) -> None:
             final_url = response.url
         # Network trouble is not proof of a bad session, so warn rather than block.
         except Exception as error:
-            print(f"Warning: could not verify the Bitbucket session ({error}). Continuing.", flush=True)
+            logging.warning(f"Could not verify the Bitbucket session ({error}). Continuing.")
             return
         finally:
             request_context.dispose()

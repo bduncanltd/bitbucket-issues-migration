@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -98,9 +99,8 @@ class BitbucketClient:
                     raise
                 reason, server_wait = fault
             wait = max(delay, server_wait)
-            print(
-                f"Warning: {reason} for GET {url}; retrying in {wait:.0f}s (attempt {attempt} of {MAX_ATTEMPTS}) ...",
-                flush=True,
+            logging.warning(
+                f"{reason} for GET {url}; retrying in {wait:.0f}s (attempt {attempt} of {MAX_ATTEMPTS}) ..."
             )
             time.sleep(wait)
             attempt += 1
