@@ -38,9 +38,14 @@ MIN_REPO_PARTS = 2
 
 
 def configure_logging() -> None:
-    """Send log output to stdout as bare lines, like a normal CLI tool."""
+    """Send log output to stdout with a timestamp and level on every line."""
 
-    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+    )
 
 
 EPILOG = """
