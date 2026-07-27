@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.error import HTTPError
@@ -21,6 +22,13 @@ API_ROOT = "https://api.bitbucket.org/2.0"
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_PAGE_LENGTH = 50
 USER_AGENT = "bitbucket-issue-archive-api/1.0"
+
+# An export fires hundreds of requests in quick succession, which trips transient
+# faults: Bitbucket's edge sheds bursts by resetting connections, and 429/5xx come and
+# go. One blip must not kill a long run, so requests retry with doubling backoff.
+MAX_ATTEMPTS = 3
+RETRY_INITIAL_DELAY_SECONDS = 2.0
+RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 class _StripAuthOnRedirect(HTTPRedirectHandler):
@@ -74,14 +82,41 @@ class BitbucketClient:
             },
         )
 
+    def _fetch(self, request: Request, url: str) -> bytes:
+        """Open ``request`` and read the body, retrying transient failures."""
+
+        attempt = 1
+        delay = RETRY_INITIAL_DELAY_SECONDS
+        while True:
+            try:
+                with self._opener.open(request, timeout=self.timeout) as response:
+                    return response.read()
+            # URLError, ConnectionResetError, and timeouts all derive from OSError.
+            except OSError as error:
+                fault = _transient_fault(error)
+                if fault is None or attempt == MAX_ATTEMPTS:
+                    raise
+                reason, server_wait = fault
+            wait = max(delay, server_wait)
+            print(
+                f"Warning: {reason} for GET {url}; retrying in {wait:.0f}s (attempt {attempt} of {MAX_ATTEMPTS}) ...",
+                flush=True,
+            )
+            time.sleep(wait)
+            attempt += 1
+            delay *= 2
+
     def get_json(self, url: str) -> dict:
         request = self._request(url)
         try:
-            with self._opener.open(request, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+            body = self._fetch(request, url)
         except HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             raise BitbucketApiError(f"GET {url} failed: HTTP {error.code} {detail}") from error
+        # Anything still failing after the retries: connection resets, DNS, timeouts.
+        except OSError as error:
+            raise BitbucketApiError(f"GET {url} failed: {error}") from error
+        return json.loads(body.decode("utf-8"))
 
     def paginate(self, path: str, page_length: int = DEFAULT_PAGE_LENGTH) -> Iterator[dict]:
         """Yield every object from a paginated collection, following ``next`` links."""
@@ -101,11 +136,27 @@ class BitbucketClient:
 
         request = self._request(url, accept="*/*")
         try:
-            with self._opener.open(request, timeout=self.timeout) as response:
-                return response.read()
+            return self._fetch(request, url)
         # HTTPError and URLError both derive from OSError, as does a socket timeout.
         except OSError as error:
             raise BitbucketApiError(f"Download {url} failed: {error}") from error
+
+
+def _transient_fault(error: OSError) -> tuple[str, float] | None:
+    """Describe a retryable failure as (reason, server-requested wait), or None if fatal.
+
+    HTTP errors are only worth retrying for throttling and server-side statuses; a 404
+    will be a 404 next time too. Everything else at the OS level — resets, DNS, timeouts
+    — is transient far more often than not.
+    """
+
+    if isinstance(error, HTTPError):
+        if error.code not in RETRYABLE_HTTP_STATUSES:
+            return None
+        retry_after = (error.headers or {}).get("Retry-After")
+        wait = float(retry_after) if retry_after and retry_after.isdigit() else 0.0
+        return f"HTTP {error.code}", wait
+    return str(getattr(error, "reason", None) or error), 0.0
 
 
 class BitbucketApiError(RuntimeError):
