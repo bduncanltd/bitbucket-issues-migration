@@ -12,7 +12,21 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10.x"
+          python-version: "3.13.x"
       - run: pip install ruff
       - run: ruff format --check
       - run: ruff check
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 3.11 is the documented minimum; 3.13 is what development uses.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pytest
+      - run: python -m pytest

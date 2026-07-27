@@ -10,10 +10,40 @@ Scripts for migrating Bitbucket issues to a Jira Cloud project.
 
 ## Overview
 
-Two tools are provided:
+Three tools are provided, each with one job:
 
-- **[Bitbucket Issue Exporter](export_archive/README.md)** — Converts a Bitbucket Issues export into a static HTML archive for offline browsing or hosting (e.g. GitHub Pages).
+- **[bitbucket_export](bitbucket_export/README.md)** — Exports a repository's issues, comments, history, attachments, and inline images into a reusable archive.
+- **[static_site](static_site/README.md)** — Turns an archive into a static HTML site.
 - **Jira Migration Scripts** — Migrates Bitbucket issues into a Jira Cloud project (see below).
+
+The older **[export_archive](export_archive/README.md)** tool, which built an HTML
+archive directly from a Bitbucket admin export zip, is kept for reference. The
+`bitbucket_export` + `static_site` pair supersedes it.
+
+---
+
+## Exporting and Publishing Issues
+
+```bash
+python -m bitbucket_export --prepare-auth                          # once
+python -m bitbucket_export workspace/repo --email you@example.com  # export
+python -m static_site .archive/workspace/repo ./my-site            # publish
+```
+
+The export lands in `.archive/<workspace>/<repo>`. Set `$BITBUCKET_EMAIL` and it
+shortens to `python -m bitbucket_export workspace/repo`.
+
+The exporter is the only step that touches the network, and it gets everything in one
+pass into a self-describing archive: one JSON file per issue under `issues/`, plus a
+`manifest.json` of shared lookup tables and content-addressed `assets/`.
+It knows nothing about HTML.
+
+The site generator reads that archive offline. It is one consumer of the
+[documented schema](bitbucket_export/README.md#the-schema), not a privileged part of
+it — a Jira importer or a search index would read the same archive the same way.
+
+Re-running the export is incremental: it reuses stored assets, so resuming an
+interrupted run, retrying failures, or picking up new issues costs almost nothing.
 
 ---
 
@@ -30,7 +60,7 @@ Re-running the migration will often update existing issues rather than create du
 
 ## Prerequisites
 
-**Python 3.10+** is required.
+**Python 3.11+** is required.
 
 Install dependencies:
 

@@ -1,4 +1,5 @@
 colorlog
 jira
 playwright
+pytest
 pyyaml
