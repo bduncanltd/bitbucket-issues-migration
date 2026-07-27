@@ -1,29 +1,43 @@
-"""Helpers for appending project-level migration logs."""
+"""Log-file handling for export runs: one complete, timestamped log per run."""
 
 from __future__ import annotations
 
+import logging
 import os
 import shlex
 import subprocess
-from collections.abc import Sequence
+import sys
 from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+LOGS_DIRNAME = "logs"
 
-def default_migration_log_path(archive_dir: Path | None) -> Path | None:
-    """Return the log path for an archive: inside the archive it describes.
 
-    It used to sit in the parent directory, from when the output directory was chosen
-    by hand and its parent was the per-repository project folder. With archive paths
-    derived as ``<root>/<workspace>/<repo>``, the parent is the workspace, so every
-    repository in a workspace shared one log.
+def start_run_log(archive_dir: Path) -> Path:
+    """Mirror this run's entire log output into a new timestamped file in the archive.
+
+    Every run gets its own file, so a retry never obscures what a previous attempt
+    did. The file receives exactly what the console shows, preceded by a header
+    recording the command, working directory, and code revision.
     """
 
-    if archive_dir is None:
-        return None
-    return archive_dir / "migration.log"
+    logs_dir = archive_dir / LOGS_DIRNAME
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_path = logs_dir / f"migration-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT))
+    logging.getLogger().addHandler(handler)
+
+    logging.info(f"Log file: {log_path}")
+    logging.info(f"Command: {shlex.join([sys.executable, *sys.argv])}")
+    logging.info(f"Workdir: {os.getcwd()}")
+    logging.info(describe_tool_revision())
+    return log_path
 
 
 def describe_tool_revision() -> str:
@@ -47,34 +61,3 @@ def describe_tool_revision() -> str:
 
     cleanliness = "dirty" if status_output else "clean"
     return f"Code revision: {revision} ({cleanliness})"
-
-
-def append_migration_log(
-    log_path: Path | None,
-    argv: Sequence[str],
-    summary_lines: Sequence[str],
-    status: str,
-) -> None:
-    """Append a structured record of a migration command run."""
-
-    if log_path is None:
-        return
-
-    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
-    command = shlex.join(argv)
-    rendered_summary = "\n".join(f"- {line}" for line in summary_lines)
-    revision_line = describe_tool_revision()
-
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as log_file:
-        if log_file.tell() != 0:
-            log_file.write("\n")
-        log_file.write(f"## {timestamp}\n")
-        log_file.write(f"Status: {status}\n")
-        log_file.write(f"{revision_line}\n")
-        log_file.write(f"Workdir: {os.getcwd()}\n")
-        log_file.write("Command:\n")
-        log_file.write(f"`{command}`\n")
-        if summary_lines:
-            log_file.write("Summary:\n")
-            log_file.write(f"{rendered_summary}\n")

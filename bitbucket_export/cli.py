@@ -25,11 +25,7 @@ from .inline_images import (
     InlineImageSessionError,
     prepare_auth,
 )
-from .migration_logging import (
-    append_migration_log,
-    default_migration_log_path,
-    describe_tool_revision,
-)
+from .migration_logging import LOG_DATE_FORMAT, LOG_FORMAT, start_run_log
 from .model import Repository
 
 DEFAULT_TOKEN_FILENAME = "BITBUCKET_API_TOKEN"
@@ -40,12 +36,7 @@ MIN_REPO_PARTS = 2
 def configure_logging() -> None:
     """Send log output to stdout with a timestamp and level on every line."""
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stdout,
-    )
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt=LOG_DATE_FORMAT, stream=sys.stdout)
 
 
 EPILOG = """
@@ -155,7 +146,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "To force-refetch specific issues, use --issue-id without --refresh."
         )
 
-    return _run_export(args)
+    try:
+        return _run_export(args)
+    # Anything unexpected must still reach the run log with its traceback; an uncaught
+    # exception would be printed by the interpreter to stderr and leave the log file
+    # ending mid-progress with no record of why.
+    except Exception:
+        logging.exception("Export failed with an unexpected error")
+        return 1
 
 
 def default_archive_dir(repository: Repository) -> Path:
@@ -165,10 +163,8 @@ def default_archive_dir(repository: Repository) -> Path:
 
 
 def _run_export(args: argparse.Namespace) -> int:
-    revision_line = describe_tool_revision()
-
     # Credentials first: the archive path depends on the parsed repository, and there
-    # is nowhere sensible to log a failure until we know it.
+    # is nowhere sensible to log until we know it.
     try:
         repository, token = _resolve_credentials(args)
     except (ValueError, OSError) as error:
@@ -176,7 +172,7 @@ def _run_export(args: argparse.Namespace) -> int:
         return 1
 
     archive_dir = default_archive_dir(repository)
-    log_path = default_migration_log_path(archive_dir)
+    start_run_log(archive_dir)
     logging.info(f"Archiving {repository.full_name} into {archive_dir}")
 
     options = AcquireOptions(
@@ -196,14 +192,12 @@ def _run_export(args: argparse.Namespace) -> int:
     try:
         result = acquire(client, options)
     except (InlineImageSessionError, BitbucketApiError) as error:
-        return _fail(log_path, revision_line, str(error))
+        logging.error(str(error))
+        return 1
 
-    # The summary is the run's actual output, not narration about it — print, so it
-    # stays even if a host application reconfigures logging.
-    summary = [revision_line, *result.summary]
-    for line in summary:
-        print(line)
-    append_migration_log(log_path, [sys.executable, *sys.argv], summary, status="success")
+    # Through logging rather than print, so the summary lands in the run log too.
+    for line in result.summary:
+        logging.info(line)
 
     incomplete = result.failed_images + result.failed_attachments
     if incomplete and not args.allow_missing_images:
@@ -246,9 +240,3 @@ def _resolve_credentials(args: argparse.Namespace) -> tuple[Repository, str]:
         raise ValueError(str(error)) from error
 
     return Repository(workspace=workspace, slug=slug), token
-
-
-def _fail(log_path: Path | None, revision_line: str, message: str) -> int:
-    logging.error(message)
-    append_migration_log(log_path, [sys.executable, *sys.argv], [revision_line, message], status="failed")
-    return 1

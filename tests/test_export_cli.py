@@ -27,3 +27,14 @@ def test_refresh_refuses_partial_selection(flags, capsys):
 
     assert excinfo.value.code == 2
     assert "--refresh" in capsys.readouterr().err
+
+
+def test_unexpected_errors_are_logged_with_traceback(monkeypatch, caplog):
+    def explode(args):
+        raise ConnectionResetError("forcibly closed")
+
+    monkeypatch.setattr("bitbucket_export.cli._run_export", explode)
+
+    assert main(["ws/repo", "--email", "x@example.com", "--token", "t"]) == 1
+    assert "Export failed with an unexpected error" in caplog.text
+    assert "ConnectionResetError" in caplog.text

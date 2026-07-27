@@ -32,7 +32,8 @@ my-archive/
   assets/
     3f/3fa8c1...e2.png           # every binary, addressed by sha256
     9b/9bd410...77.pdf
-  migration.log                  # what each run did
+  logs/
+    migration-20260727-172401.log  # complete log of each run, one file per run
 ```
 
 Plain JSON and plain files. Nothing about the format depends on this tool still
