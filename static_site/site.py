@@ -15,7 +15,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from bitbucket_export.model import Archive, Issue
+from bitbucket_export.model import MENTION_RE, Archive, Issue
 
 from .rendering import (
     IssuePageData,
@@ -181,11 +181,21 @@ def _copy_assets(assets, archive_dir: Path, output_dir: Path) -> int:
 # ---- adapters to the renderer's flat dict shape ------------------------------
 
 
+def _resolve_mentions(markdown: str, archive: Archive) -> str:
+    """Rewrite ``@{account-id}`` mentions to display names; unknown ids stay raw."""
+
+    def replace(match: re.Match[str]) -> str:
+        user = archive.users.get(match.group(1))
+        return f"@{user.display_name}" if user and user.display_name else match.group(0)
+
+    return MENTION_RE.sub(replace, markdown)
+
+
 def _issue_dict(issue: Issue, archive: Archive) -> dict:
     return {
         "id": issue.id,
         "title": issue.title,
-        "content": issue.content.markdown,
+        "content": _resolve_mentions(issue.content.markdown, archive),
         "content_markup": issue.content.markup,
         "reporter": archive.display_name(issue.reporter),
         "assignee": archive.display_name(issue.assignee),
@@ -210,7 +220,7 @@ def _comment_dicts(issue: Issue, archive: Archive) -> list[dict]:
         {
             "id": comment.id,
             "issue": issue.id,
-            "content": comment.content.markdown,
+            "content": _resolve_mentions(comment.content.markdown, archive),
             "content_markup": comment.content.markup,
             "user": archive.display_name(comment.user),
             "created_on": comment.created_on,

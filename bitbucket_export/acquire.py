@@ -37,6 +37,7 @@ from .inline_images import (
 )
 from .markdown_images import iter_image_urls
 from .model import (
+    MENTION_RE,
     ORIGIN_ATTACHMENT,
     ORIGIN_INLINE_IMAGE,
     SCHEMA_VERSION,
@@ -134,6 +135,7 @@ def acquire(client: BitbucketClient, options: AcquireOptions) -> AcquireResult:
     archive.issues = sorted(issues_by_id.values(), key=lambda issue: issue.id)
     archive.users = users
     _fetch_definitions(client, archive)
+    _resolve_mentioned_users(client, archive.issues, users)
 
     _download_attachments(client, store, pending_attachments)
     failed_attachments = sum(1 for attachment, _ in pending_attachments if attachment.asset_id is None)
@@ -492,6 +494,36 @@ def _fetch_definitions(client: BitbucketClient, archive: Archive) -> None:
             # list; that is not a reason to fail the export.
             logging.warning(f"Could not list {path}: {error}")
         target.sort(key=lambda entry: entry.name.lower())
+
+
+def _resolve_mentioned_users(client: BitbucketClient, issues: list[Issue], users: dict[str, User]) -> None:
+    """Capture the names of users who are only ever @-mentioned in issue text.
+
+    A mentioned user who never reported, commented, or changed anything appears in no
+    API record the export walks, so their ``@{account-id}`` would stay unresolvable
+    forever once Bitbucket is gone. Discovery is offline over the collected markdown;
+    only ids not already in the users table cost an API call, so re-runs are cheap.
+    """
+
+    mentioned: set[str] = set()
+    for issue in issues:
+        mentioned.update(MENTION_RE.findall(issue.content.markdown))
+        for comment in issue.comments:
+            mentioned.update(MENTION_RE.findall(comment.content.markdown))
+
+    unknown = sorted(mentioned - users.keys())
+    if not unknown:
+        return
+
+    logging.info(f"Resolving {len(unknown)} users known only from @-mentions ...")
+    for account_id in unknown:
+        try:
+            raw_user = client.fetch_user(account_id)
+        # A deleted account 404s; the mention stays raw rather than failing the export.
+        except BitbucketApiError as error:
+            logging.warning(f"Could not resolve mentioned user {account_id}: {error}")
+            continue
+        _intern_user(users, raw_user)
 
 
 def _intern_user(users: dict[str, User], raw_user: dict | None) -> str | None:

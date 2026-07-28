@@ -17,6 +17,7 @@ from jira_migration.migrator import (
     _get_issue_status,
     _get_issue_type,
     _inline_images,
+    _resolve_mentions,
 )
 
 BITBUCKET_KINDS = ("bug", "enhancement", "proposal", "task")
@@ -69,6 +70,16 @@ def test_creole_content_is_wrapped_verbatim_not_converted():
 
     body = _get_comment_body(BitbucketComment(author="A", created="t", body="**x**", markup="creole"))
     assert "{noformat}\n**x**\n{noformat}" in body
+
+
+def test_mentions_become_real_jira_mentions_or_display_names():
+    display_names = {"acc-1": "User One", "acc-2": "User Two"}
+    jira_user_ids = {"acc-1"}
+
+    resolved = _resolve_mentions("ping @{acc-1}, @{acc-2}, @{acc-3}", display_names, jira_user_ids)
+
+    # In Jira: acc-1 is a real mention, acc-2 a plain name, acc-3 unresolvable and left raw.
+    assert resolved == "ping [~accountId:acc-1], @User Two, @{acc-3}"
 
 
 class _StubSource:

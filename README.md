@@ -249,6 +249,7 @@ The migration attempts to transition each issue to its target status after creat
 - **Comments** cannot preserve the original author or timestamp in Jira — all migrated comments appear as posted by the API user at the time of migration. To work around this, each comment is prefixed with a metadata line showing the original Bitbucket author and timestamp. Bitbucket's empty field-change comments are not migrated.
 - **Inline images** (e.g. screenshots pasted into descriptions) are taken from the archive and uploaded to Jira as attachments, replacing the original URLs. Images the archive could not capture are left as their original URLs, with a warning.
 - **File attachments** are uploaded from the archive. Already-uploaded files (matched by filename) are not re-uploaded.
+- **User mentions** (`@{account-id}` in Bitbucket markdown) become real Jira mentions for users that exist in Jira — the account ids are the same on both sides — and plain display names for everyone else. Real mentions notify the mentioned user unless the project's notification scheme is disabled during migration.
 - **Markdown** in descriptions and comments is converted to Jira Wiki Markup. Bodies written in creole or plaintext (which old Bitbucket trackers contain) are preserved verbatim in `{noformat}` blocks instead of being mis-parsed as Markdown.
 
 ---

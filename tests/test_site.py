@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from bitbucket_export.model import Archive, Asset, Content, Issue, Repository
+from bitbucket_export.model import Archive, Asset, Content, Issue, Repository, User
 from static_site.cli import main
-from static_site.site import MissingAssetError, render_site
+from static_site.site import MissingAssetError, _resolve_mentions, render_site
 
 DIGEST = "b" * 64
 ASSET_PATH = f"assets/bb/{DIGEST}.png"
@@ -62,6 +62,15 @@ def test_cli_defaults_output_to_site_dir_mirroring_the_archive(tmp_path, monkeyp
 
     assert main([str(archive_dir)]) == 0
     assert (tmp_path / ".site" / "ws" / "repo" / "index.html").exists()
+
+
+def test_mentions_resolve_to_display_names():
+    archive = Archive(repository=Repository(workspace="ws", slug="repo"))
+    archive.users = {"acc-1": User(key="acc-1", display_name="User One", account_id="acc-1")}
+
+    resolved = _resolve_mentions("ask @{acc-1} or @{unknown-id}", archive)
+
+    assert resolved == "ask @User One or @{unknown-id}"
 
 
 def test_allow_missing_assets_renders_and_reports_the_gap(tmp_path):

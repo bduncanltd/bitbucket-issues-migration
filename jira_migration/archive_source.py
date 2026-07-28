@@ -39,6 +39,19 @@ class ArchiveSource:
         return defined | used
 
     @property
+    def display_names(self) -> dict[str, str]:
+        """Display name by Atlassian account id, for resolving ``@{id}`` mentions.
+
+        Includes users the exporter captured from mentions alone, not just issue
+        participants.
+        """
+        return {
+            user.account_id: user.display_name
+            for user in self._archive.users.values()
+            if user.account_id and user.display_name
+        }
+
+    @property
     def user_ids(self) -> set[str]:
         """All reporter and assignee account ids found across all issues."""
         ids: set[str] = set()

@@ -76,7 +76,7 @@ what distinguishes a comment whose text was removed from one that never had any.
 | --- | --- |
 | `repository`, `title`, `generated_at`, `schema_version` | Provenance |
 | `stats` | Issue, comment, attachment, and asset counts |
-| `users` | Interned accounts, so `account_id` and display name both survive |
+| `users` | Interned accounts, so `account_id` and display name both survive — including users known only from `@{account-id}` mentions in issue text |
 | `components`, `milestones`, `versions` | Defined on the repository — **including any not used by an issue**, since those are part of the tracker's structure and appear nowhere else |
 | `assets` | id → `{path, size, sha256, content_type, filename, origins, source_urls}` |
 | `asset_index` | **original Bitbucket URL → asset id** |

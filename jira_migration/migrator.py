@@ -11,6 +11,7 @@ from pathlib import Path
 from jira import Issue
 from jira.exceptions import JIRAError
 
+from bitbucket_export.model import MENTION_RE
 from jira_migration import markup
 from jira_migration.archive_source import ArchiveSource
 from jira_migration.bitbucket_issue import BitbucketComment, BitbucketIssue
@@ -48,6 +49,24 @@ PRIORITY_MAP = {
 }
 
 INLINE_IMAGE_RE = re.compile(r"!(https?://[^!]+)!")
+
+
+def _resolve_mentions(text: str, display_names: dict[str, str], jira_user_ids: set[str]) -> str:
+    """Rewrite Bitbucket ``@{account-id}`` mentions for Jira.
+
+    A user who exists in Jira becomes a real mention (``[~accountId:...]`` — same
+    Atlassian account ids on both sides). Anyone else becomes their display name as
+    plain text, and an id the archive cannot name is left raw.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        account_id = match.group(1)
+        if account_id in jira_user_ids:
+            return f"[~accountId:{account_id}]"
+        name = display_names.get(account_id)
+        return f"@{name}" if name else match.group(0)
+
+    return MENTION_RE.sub(replace, text)
 
 
 def _get_user_id(valid_user_ids: set[str], account_id: str | None) -> str | None:
@@ -177,17 +196,22 @@ class BitbucketJiraMigrator:
 
         issues = self._export.issues[from_issue - 1 : from_issue - 1 + limit if limit is not None else None]
         total = len(self._export.issues)
+        display_names = self._export.display_names
+        jira_user_ids = self._jira.known_user_ids
         for i, bb_issue in enumerate(issues, start=from_issue):
             jira_issue_details = JiraIssueDetails(
                 key=f"{self._config.board_id}-{bb_issue.id}",
                 summary=bb_issue.summary,
-                description=_get_description(bb_issue),
+                description=_resolve_mentions(_get_description(bb_issue), display_names, jira_user_ids),
                 issue_type=_get_issue_type(bb_issue),
                 priority_id=_get_priority_id(bb_issue),
                 account_id=_get_user_id(self.valid_user_ids, bb_issue.assignee),
                 reporter_id=_get_user_id(self.valid_user_ids, bb_issue.reporter),
                 status=_get_issue_status(bb_issue),
-                comments=[_get_comment_body(comment) for comment in bb_issue.comments],
+                comments=[
+                    _resolve_mentions(_get_comment_body(comment), display_names, jira_user_ids)
+                    for comment in bb_issue.comments
+                ],
                 component=bb_issue.component,
             )
 

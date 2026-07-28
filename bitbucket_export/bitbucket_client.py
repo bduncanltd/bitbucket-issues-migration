@@ -127,6 +127,15 @@ class BitbucketClient:
             yield from payload.get("values", [])
             url = payload.get("next")
 
+    def fetch_user(self, account_id: str) -> dict:
+        """Fetch a user's public profile by Atlassian account id.
+
+        Used to resolve users who are only ever @-mentioned in issue text and so never
+        appear in any issue, comment, or change record.
+        """
+
+        return self.get_json(f"{API_ROOT}/users/{account_id}")
+
     def fetch_bytes(self, url: str) -> bytes:
         """Fetch a binary resource into memory.
 

@@ -24,6 +24,7 @@ renderer, a Jira importer, or a full-text indexer can all read the same archive.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,6 +44,11 @@ ISSUES_DIRNAME = "issues"
 
 ORIGIN_ATTACHMENT = "attachment"
 ORIGIN_INLINE_IMAGE = "inline-image"
+
+# Bitbucket's raw user-mention syntax in markdown: ``@{atlassian-account-id}``. Part of
+# the published schema surface — markdown is stored verbatim, so consumers that want to
+# show names (or real mentions) match this and look the id up in the ``users`` table.
+MENTION_RE = re.compile(r"@\{([^}\s]+)\}")
 
 
 @dataclass

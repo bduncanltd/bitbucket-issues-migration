@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bitbucket_export.acquire import AcquireOptions, _download_attachments, _issues_needing_fetch
+from bitbucket_export.acquire import (
+    AcquireOptions,
+    _download_attachments,
+    _issues_needing_fetch,
+    _resolve_mentioned_users,
+)
 from bitbucket_export.asset_store import AssetStore
 from bitbucket_export.bitbucket_client import BitbucketApiError
-from bitbucket_export.model import Attachment, Issue, Repository
+from bitbucket_export.model import Attachment, Comment, Content, Issue, Repository, User
 
 TIMESTAMP = "2026-01-01T00:00:00+00:00"
 
@@ -79,3 +84,30 @@ def test_successful_attachment_download_stores_and_links_the_asset(tmp_path):
     assert attachment.asset_id is not None
     stored_path = tmp_path / store.assets[attachment.asset_id].path
     assert stored_path.read_bytes() == b"png-bytes"
+
+
+class _UserClient:
+    """Resolves one known account id; every other lookup 404s."""
+
+    def fetch_user(self, account_id: str) -> dict:
+        if account_id == "5d6d9f3f95fbcc0c341d7b6f":
+            return {"account_id": account_id, "display_name": "Mentioned Only", "nickname": "mentioned"}
+        raise BitbucketApiError(f"GET users/{account_id} failed: HTTP 404")
+
+
+def test_mention_only_users_are_resolved_and_interned():
+    users = {"participant": User(key="participant", display_name="Already Known", account_id="participant")}
+    issues = [
+        Issue(
+            id=1,
+            content=Content(markdown="@{5d6d9f3f95fbcc0c341d7b6f} and @{participant} could confirm."),
+            comments=[Comment(id=1, content=Content(markdown="cc @{gone-account}"))],
+        )
+    ]
+
+    _resolve_mentioned_users(_UserClient(), issues, users)
+
+    assert users["5d6d9f3f95fbcc0c341d7b6f"].display_name == "Mentioned Only"
+    # The deleted account stays absent — its mention will render raw, not crash.
+    assert "gone-account" not in users
+    assert users["participant"].display_name == "Already Known"
