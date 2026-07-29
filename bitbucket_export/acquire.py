@@ -425,7 +425,10 @@ def _download_inline_images(
         if result.ok:
             logging.info(f"{line}: ok")
         else:
-            logging.warning(f"{line}: FAILED ({result.error})")
+            # The referenced-by tag is issue-{id}[#comment-{id}], which maps straight
+            # onto Bitbucket's issue URL and comment anchor.
+            location = referenced_by[result.url].removeprefix("issue-")
+            logging.warning(f"{line}: FAILED ({result.error}) — {options.repository.url}/issues/{location}")
 
     results = fetch_images(
         urls=wanted,
