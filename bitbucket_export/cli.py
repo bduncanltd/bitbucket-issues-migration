@@ -15,6 +15,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
 
+import colorlog
+
 from .acquire import AcquireOptions, acquire
 from .bitbucket_client import BitbucketApiError, BitbucketClient, read_token
 from .inline_images import (
@@ -34,9 +36,11 @@ MIN_REPO_PARTS = 2
 
 
 def configure_logging() -> None:
-    """Send log output to stdout with a timestamp and level on every line."""
+    """Send log output to stdout with a timestamp and level on every line, coloured by level."""
 
-    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt=LOG_DATE_FORMAT, stream=sys.stdout)
+    handler = colorlog.StreamHandler(sys.stdout)
+    handler.setFormatter(colorlog.ColoredFormatter(f"%(log_color)s{LOG_FORMAT}", datefmt=LOG_DATE_FORMAT))
+    logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 
 EPILOG = """
