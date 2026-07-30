@@ -22,10 +22,13 @@ import importlib
 import json
 import logging
 import threading
+import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+
+from .bitbucket_client import MAX_ATTEMPTS, RETRY_INITIAL_DELAY_SECONDS, RETRYABLE_HTTP_STATUSES
 
 DEFAULT_AUTH_STATE = Path.home() / ".cache" / "bitbucket-playwright" / "auth-state.json"
 DEFAULT_LOGIN_URL = "https://bitbucket.org/account/signin/"
@@ -241,12 +244,30 @@ def _fetch_batch(
 
 
 def _fetch_one(request_context, url: str, request_timeout_ms: int) -> FetchedImage:
-    try:
-        response = request_context.get(url, fail_on_status_code=False, timeout=request_timeout_ms)
-    # Playwright raises bare Exceptions for transport faults; any of them is just a
-    # failed image, recorded as unresolved rather than aborting the whole run.
-    except Exception as error:
-        return FetchedImage(url=url, body=None, content_type=None, error=str(error))
+    attempt = 1
+    delay = RETRY_INITIAL_DELAY_SECONDS
+    while True:
+        try:
+            response = request_context.get(url, fail_on_status_code=False, timeout=request_timeout_ms)
+        # Playwright raises bare Exceptions for transport faults; any of them is just a
+        # failed image, recorded as unresolved rather than aborting the whole run.
+        except Exception as error:
+            return FetchedImage(url=url, body=None, content_type=None, error=str(error))
+
+        # The asset host throttles bursts just like the API edge does, so 429/5xx get
+        # the same retry policy as the API client rather than becoming failed images.
+        if response.status in RETRYABLE_HTTP_STATUSES and attempt < MAX_ATTEMPTS:
+            retry_after = response.headers.get("retry-after")
+            wait = max(delay, float(retry_after) if retry_after and retry_after.isdigit() else 0.0)
+            logging.warning(
+                f"HTTP {response.status} for GET {url}; retrying in {wait:.0f}s (attempt {attempt} of {MAX_ATTEMPTS}) ..."
+            )
+            time.sleep(wait)
+            attempt += 1
+            delay *= 2
+            continue
+
+        break
 
     if not response.ok:
         return FetchedImage(url=url, body=None, content_type=None, error=f"HTTP {response.status}")
