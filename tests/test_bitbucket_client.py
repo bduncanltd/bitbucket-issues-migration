@@ -26,18 +26,19 @@ class _FakeResponse:
 
 
 class _ScriptedOpener:
-    """Raises each scripted failure in turn, then answers successfully."""
+    """Raises each scripted failure in turn, then answers each queued body in order."""
 
-    def __init__(self, failures: list[Exception], body: bytes = b'{"values": []}') -> None:
+    def __init__(self, failures: list[Exception], body: bytes | list[bytes] = b'{"values": []}') -> None:
         self.failures = list(failures)
-        self.body = body
+        self.bodies = [body] if isinstance(body, bytes) else list(body)
         self.calls = 0
 
     def open(self, request, timeout=None):
         self.calls += 1
         if self.failures:
             raise self.failures.pop(0)
-        return _FakeResponse(self.body)
+        body = self.bodies.pop(0) if len(self.bodies) > 1 else self.bodies[0]
+        return _FakeResponse(body)
 
 
 @pytest.fixture
@@ -91,6 +92,20 @@ def test_client_errors_are_not_retried(no_sleep):
         client.get_json("https://api.example/x")
     assert opener.calls == 1
     assert no_sleep == []
+
+
+def test_paginate_url_follows_next_links():
+    opener = _ScriptedOpener(
+        [],
+        body=[
+            b'{"values": [{"id": 1}], "next": "https://api.example/x?page=2"}',
+            b'{"values": [{"id": 2}]}',
+        ],
+    )
+    client = _client(opener)
+
+    assert list(client.paginate_url("https://api.example/x")) == [{"id": 1}, {"id": 2}]
+    assert opener.calls == 2
 
 
 def test_fetch_bytes_retries_too(no_sleep):

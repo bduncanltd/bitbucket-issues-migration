@@ -17,6 +17,13 @@ all land in `.archive/workspace/repo`, derived from the repository you asked for
 Set `$BITBUCKET_EMAIL` (and optionally `$BITBUCKET_API_TOKEN`) and it becomes
 `python -m bitbucket_export workspace/repo`.
 
+Not sure which repositories are worth exporting? List every one in a workspace that
+has issues, with counts per repository grouped by project:
+
+```bash
+python -m bitbucket_export.workspace_issues workspace --email you@example.com
+```
+
 To turn an archive into a browsable website, see
 [`static_site`](../static_site/README.md) — a separate tool that reads what this one
 writes.

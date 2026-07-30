@@ -119,13 +119,18 @@ class BitbucketClient:
         return json.loads(body.decode("utf-8"))
 
     def paginate(self, path: str, page_length: int = DEFAULT_PAGE_LENGTH) -> Iterator[dict]:
-        """Yield every object from a paginated collection, following ``next`` links."""
+        """Yield every object from a paginated collection under this repository."""
 
-        url: str | None = f"{self.repo_url}/{path}?pagelen={page_length}"
-        while url:
-            payload = self.get_json(url)
+        yield from self.paginate_url(f"{self.repo_url}/{path}?pagelen={page_length}")
+
+    def paginate_url(self, url: str) -> Iterator[dict]:
+        """Yield every object from a paginated collection at an absolute URL, following ``next`` links."""
+
+        next_url: str | None = url
+        while next_url:
+            payload = self.get_json(next_url)
             yield from payload.get("values", [])
-            url = payload.get("next")
+            next_url = payload.get("next")
 
     def fetch_user(self, account_id: str) -> dict:
         """Fetch a user's public profile by Atlassian account id.
