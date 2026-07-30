@@ -74,14 +74,16 @@ def test_counts_follow_repository_pagination():
     assert {count.repo_slug: count.issue_count for count in counts} == {"first": 1, "second": 4}
 
 
-def test_rows_sorted_by_project_then_repo():
+def test_rows_sorted_alphabetically_by_repo():
+    # Project keys deliberately run counter to the repo order, so grouping by
+    # project would fail this test.
     client = _FakeClient(
         {
             LIST_URL: {
                 "values": [
-                    _repo("zeta", project_key="TOOLS"),
-                    _repo("Beta", project_key="core"),
-                    _repo("alpha", project_key="CORE"),
+                    _repo("zeta", project_key="ALPHA"),
+                    _repo("Beta", project_key="zulu"),
+                    _repo("alpha", project_key="MIKE"),
                 ]
             },
             _issues_url("zeta"): {"size": 1},

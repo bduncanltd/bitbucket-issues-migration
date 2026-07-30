@@ -1,7 +1,7 @@
 """Table of every repository in a workspace whose issue tracker has issues.
 
 Answers "which repositories are worth exporting?" before any per-repository export
-runs: one row per repository with issues, grouped by Bitbucket project.
+runs: one row per repository with issues, listed alphabetically by repository.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def fetch_issue_counts(client: BitbucketClient, workspace: str) -> list[RepoIssu
                 issue_count=issues["size"],
             )
         )
-    return sorted(counts, key=lambda count: (count.project_key.lower(), count.repo_slug.lower()))
+    return sorted(counts, key=lambda count: count.repo_slug.lower())
 
 
 def render_table(counts: list[RepoIssueCount]) -> str:
