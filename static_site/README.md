@@ -40,9 +40,9 @@ Everything goes through the published schema — there is no private channel bac
 exporter:
 
 ```python
-archive.path_for_url(url)        # rewrite a markdown URL to a local file
-archive.display_name(user_key)   # resolve an interned user
-archive.issue_ids()              # rewrite cross-issue Bitbucket links to local pages
+archive.path_for_url(url)  # rewrite a markdown URL to a local file
+archive.display_name(user_key)  # resolve an interned user
+archive.issue_ids()  # rewrite cross-issue Bitbucket links to local pages
 ```
 
 `ArchiveLocalizer` in [`site.py`](site.py) is that logic, and the adapters below it

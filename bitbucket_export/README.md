@@ -98,7 +98,7 @@ from bitbucket_export import Archive
 archive = Archive.load(Path("my-archive"))
 for issue in archive.issues:
     for url in issue.content.image_urls:
-        local = archive.path_for_url(url)   # "assets/3f/3fa8...e2.png", or None
+        local = archive.path_for_url(url)  # "assets/3f/3fa8...e2.png", or None
 ```
 
 Assets are content-addressed, so the same screenshot pasted into thirty issues is
@@ -205,9 +205,9 @@ Anything that reads the archive starts the same way:
 
 ```python
 archive = Archive.load(archive_dir)
-archive.path_for_url(url)        # original URL -> stored file
-archive.display_name(user_key)   # user key -> display name
-archive.issue_ids()              # e.g. for rewriting cross-issue links
+archive.path_for_url(url)  # original URL -> stored file
+archive.display_name(user_key)  # user key -> display name
+archive.issue_ids()  # e.g. for rewriting cross-issue links
 ```
 
 [`static_site`](../static_site/README.md) is a worked example: it adapts the archive
