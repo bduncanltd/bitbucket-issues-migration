@@ -90,7 +90,7 @@ class _UserClient:
     """Resolves one known account id; every other lookup 404s."""
 
     def fetch_user(self, account_id: str) -> dict:
-        if account_id == "5d6d9f3f95fbcc0c341d7b6f":
+        if account_id == "abcd1234":
             return {"account_id": account_id, "display_name": "Mentioned Only", "nickname": "mentioned"}
         raise BitbucketApiError(f"GET users/{account_id} failed: HTTP 404")
 
@@ -100,14 +100,14 @@ def test_mention_only_users_are_resolved_and_interned():
     issues = [
         Issue(
             id=1,
-            content=Content(markdown="@{5d6d9f3f95fbcc0c341d7b6f} and @{participant} could confirm."),
+            content=Content(markdown="@{abcd1234} and @{participant} could confirm."),
             comments=[Comment(id=1, content=Content(markdown="cc @{gone-account}"))],
         )
     ]
 
     _resolve_mentioned_users(_UserClient(), issues, users)
 
-    assert users["5d6d9f3f95fbcc0c341d7b6f"].display_name == "Mentioned Only"
+    assert users["abcd1234"].display_name == "Mentioned Only"
     # The deleted account stays absent — its mention will render raw, not crash.
     assert "gone-account" not in users
     assert users["participant"].display_name == "Already Known"
