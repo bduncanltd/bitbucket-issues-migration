@@ -14,6 +14,7 @@ import base64
 import json
 import logging
 import time
+import typing
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.error import HTTPError
@@ -40,7 +41,8 @@ class _StripAuthOnRedirect(HTTPRedirectHandler):
     S3 makes it reject the request, so we remove it whenever we cross hosts.
     """
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913 - signature fixed by base class
+    @typing.override
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         new_request = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_request is None:
             return None

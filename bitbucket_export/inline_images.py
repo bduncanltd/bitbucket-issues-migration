@@ -260,7 +260,8 @@ def _fetch_one(request_context, url: str, request_timeout_ms: int) -> FetchedIma
             retry_after = response.headers.get("retry-after")
             wait = max(delay, float(retry_after) if retry_after and retry_after.isdigit() else 0.0)
             logging.warning(
-                f"HTTP {response.status} for GET {url}; retrying in {wait:.0f}s (attempt {attempt} of {MAX_ATTEMPTS}) ..."
+                f"HTTP {response.status} for GET {url}; retrying in "
+                f"{wait:.0f}s (attempt {attempt} of {MAX_ATTEMPTS}) ..."
             )
             time.sleep(wait)
             attempt += 1
