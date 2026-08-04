@@ -1,135 +1,173 @@
-"""Orchestrates the migration from a Bitbucket export to a Jira project."""
+"""Orchestrates the migration from a Bitbucket issue archive to a Jira project."""
 
 from __future__ import annotations
 
 import logging
+import re
 import sys
+from collections.abc import Iterable
+from pathlib import Path
 
 from jira import Issue
 from jira.exceptions import JIRAError
 
+from bitbucket_export.model import MENTION_RE
 from jira_migration import markup
-from jira_migration.bitbucket_export import BitbucketExport
-from jira_migration.bitbucket_issue import BitbucketIssue
+from jira_migration.archive_source import ArchiveSource
+from jira_migration.bitbucket_issue import BitbucketComment, BitbucketIssue
 from jira_migration.config import JiraMigrationConfig
 from jira_migration.jira_import import JiraImport
 from jira_migration.jira_issue_details import JiraIssueDetails
 
-# Map Bitbucket issue types to Jira issue types.
+# Map Bitbucket issue kinds to Jira issue types.
 ISSUE_TYPE_MAP = {
-    "Story": "Task",
-    "Task": "Task",
-    "Bug": "Bug",
+    "bug": "Bug",
+    "enhancement": "Task",
+    "proposal": "Task",
+    "task": "Task",
 }
 
-# Map Bitbucket issue statuses to Jira issue statuses.
+# Map Bitbucket issue states to Jira issue statuses.
 ISSUE_STATUS_MAP = {
-    "Done": "Done",
-    "Selected For Development": "In Progress",
-    "Backlog": "To Do",
-}
-
-# When resolution is set, it overrides the status mapping.
-RESOLUTION_STATUS_MAP = {
+    "new": "To Do",
+    "open": "In Progress",
+    "on hold": "To Do",
+    "resolved": "Done",
+    "closed": "Done",
     "invalid": "Invalid",
     "duplicate": "Invalid",
     "wontfix": "Invalid",
-    "won't fix": "Invalid",
-    "resolved": "Done",
 }
 
-# Map Bitbucket issue priorities to Jira priority IDs.
+# Map Bitbucket priorities to Jira priority IDs.
 PRIORITY_MAP = {
-    "Highest": "1",
-    "Medium": "2",
-    "Low": "3",
-    "High": "4",
-    "Lowest": "5",
+    "blocker": "1",
+    "critical": "4",
+    "major": "2",
+    "minor": "3",
+    "trivial": "5",
 }
 
+INLINE_IMAGE_RE = re.compile(r"!(https?://[^!]+)!")
 
-def _get_user_id(valid_user_ids: set[str], bitbucket_user_id: str) -> str | None:
-    if bitbucket_user_id in valid_user_ids:
-        return bitbucket_user_id
+
+def _resolve_mentions(text: str, display_names: dict[str, str], jira_user_ids: set[str]) -> str:
+    """Rewrite Bitbucket ``@{account-id}`` mentions for Jira.
+
+    A user who exists in Jira becomes a real mention (``[~accountId:...]`` — same
+    Atlassian account ids on both sides). Anyone else becomes their display name as
+    plain text, and an id the archive cannot name is left raw.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        account_id = match.group(1)
+        if account_id in jira_user_ids:
+            return f"[~accountId:{account_id}]"
+        name = display_names.get(account_id)
+        return f"@{name}" if name else match.group(0)
+
+    return MENTION_RE.sub(replace, text)
+
+
+def _get_user_id(valid_user_ids: set[str], account_id: str | None) -> str | None:
+    if account_id and account_id in valid_user_ids:
+        return account_id
     return None
 
 
 def _get_issue_type(issue: BitbucketIssue) -> str:
-    if issue.type not in ISSUE_TYPE_MAP:
-        logging.error(
-            "Unknown issue type '%s' for issue %d. Update ISSUE_TYPE_MAP.",
-            issue.type,
-            issue.id,
-        )
+    if issue.kind not in ISSUE_TYPE_MAP:
+        logging.error("Unknown issue kind '%s' for issue %d. Update ISSUE_TYPE_MAP.", issue.kind, issue.id)
         sys.exit()
-    return ISSUE_TYPE_MAP[issue.type]
+    return ISSUE_TYPE_MAP[issue.kind]
 
 
 def _get_issue_status(issue: BitbucketIssue) -> str:
-    if issue.resolution in RESOLUTION_STATUS_MAP:
-        return RESOLUTION_STATUS_MAP[issue.resolution]
-    if issue.status not in ISSUE_STATUS_MAP:
-        logging.error(
-            "Unknown issue status '%s' for issue %d. Update ISSUE_STATUS_MAP.",
-            issue.status,
-            issue.id,
-        )
+    if issue.state not in ISSUE_STATUS_MAP:
+        logging.error("Unknown issue state '%s' for issue %d. Update ISSUE_STATUS_MAP.", issue.state, issue.id)
         sys.exit()
-    return ISSUE_STATUS_MAP[issue.status]
+    return ISSUE_STATUS_MAP[issue.state]
 
 
-def _get_priority_id(priority: str) -> str:
-    assert priority in PRIORITY_MAP
-    return PRIORITY_MAP[priority]
+def _get_priority_id(issue: BitbucketIssue) -> str:
+    if issue.priority not in PRIORITY_MAP:
+        logging.error("Unknown priority '%s' for issue %d. Update PRIORITY_MAP.", issue.priority, issue.id)
+        sys.exit()
+    return PRIORITY_MAP[issue.priority]
 
 
-def _get_description(bb_issue: BitbucketIssue, display_names: dict[str, str]) -> str:
+def _get_description(bb_issue: BitbucketIssue) -> str:
     raw = bb_issue.description
     if raw.startswith("Imported from "):
         _, separator, imported_body = raw.partition("\n")
         if separator:
             raw = imported_body.strip()
 
-    assignee = display_names.get(bb_issue.assignee, bb_issue.assignee) if bb_issue.assignee else "N/A"
-    reporter = display_names.get(bb_issue.reporter, bb_issue.reporter) if bb_issue.reporter else "N/A"
-    header = (
-        "_"
-        f"Issue imported from Bitbucket. "
-        f"Original status: {bb_issue.status}, "
-        f"resolution: {bb_issue.resolution or 'N/A'}, "
-        f"type: {bb_issue.type}, "
-        f"Assignee: {assignee}, "
-        f"Reporter: {reporter}, "
-        f"created: {bb_issue.created}, "
-        f"updated: {bb_issue.updated}"
-        "_"
+    parts = [
+        f"Original: [{bb_issue.url}]" if bb_issue.url else "Issue imported from Bitbucket",
+        f"state: {bb_issue.state}",
+        f"kind: {bb_issue.kind}",
+        f"priority: {bb_issue.priority}",
+        f"Assignee: {bb_issue.assignee_name or 'N/A'}",
+        f"Reporter: {bb_issue.reporter_name or 'N/A'}",
+    ]
+    for label, value in (
+        ("component", bb_issue.component),
+        ("milestone", bb_issue.milestone),
+        ("version", bb_issue.version),
+    ):
+        if value:
+            parts.append(f"{label}: {value}")
+    parts.append(f"created: {bb_issue.created}")
+    parts.append(f"updated: {bb_issue.updated}")
+
+    header = "_" + ", ".join(parts) + "_"
+    return f"{markup.convert_content(raw, bb_issue.description_markup)}\n\n----\n{header}"
+
+
+def _get_comment_body(comment: BitbucketComment) -> str:
+    author = comment.author or "Unknown"
+    return (
+        f"_Comment migrated from Bitbucket, user: {author}, time: {comment.created}_\n\n"
+        f"{markup.convert_content(comment.body, comment.markup)}"
     )
-    return f"{markup.convert(raw)}\n\n----\n{header}"
 
 
-def _get_comment_body(bb_comment: dict[str, str], display_names: dict[str, str]) -> str:
-    author_id = bb_comment.get("author", "")
-    author = display_names.get(author_id, author_id) or "Unknown"
-    created = bb_comment.get("created", "")
-    body = bb_comment.get("body", "")
-    return f"_Comment migrated from Bitbucket, user: {author}, time: {created}_\n\n{markup.convert(body)}"
+def _inline_images(source: ArchiveSource, issue_id: int, texts: Iterable[str]) -> dict[str, tuple[Path, str]]:
+    """Map each archived inline-image URL in ``texts`` to (stored file, upload name).
+
+    Upload names are the assets' original filenames; when two *different* assets on
+    the same issue share a filename, the later one falls back to its content-addressed
+    file name, which is unique.
+    """
+    result: dict[str, tuple[Path, str]] = {}
+    name_owners: dict[str, str] = {}
+    for text in texts:
+        for url in INLINE_IMAGE_RE.findall(text):
+            if url in result:
+                continue
+            resolved = source.inline_image(url)
+            if resolved is None:
+                logging.warning("Issue %d references an image the archive does not hold: %s", issue_id, url)
+                continue
+            path, name, asset_id = resolved
+            if name_owners.setdefault(name, asset_id) != asset_id:
+                name = path.name
+            result[url] = (path, name)
+    return result
 
 
 class BitbucketJiraMigrator:
-    def __init__(self, export: BitbucketExport, jira: JiraImport, config: JiraMigrationConfig) -> None:
+    def __init__(self, export: ArchiveSource, jira: JiraImport, config: JiraMigrationConfig) -> None:
         self._export = export
         self._jira = jira
         self._config = config
 
     @property
     def valid_user_ids(self) -> set[str]:
-        """User IDs that can be assigned in Jira, after applying the BB→Jira ID map."""
+        """Account ids that can be assigned in Jira."""
         known = self._jira.known_user_ids
-        valid: set[str] = set()
-        for bb_id in self._export.user_ids:
-            if bb_id in known:
-                valid.add(bb_id)
-        return valid
+        return {account_id for account_id in self._export.user_ids if account_id in known}
 
     def _log_unmapped_users(self) -> None:
         known = self._jira.known_user_ids
@@ -152,22 +190,29 @@ class BitbucketJiraMigrator:
         self._jira.assert_project_exists()
         self._log_unmapped_users()
         self._jira.log_user_details(self.valid_user_ids)
+        # Components exist before any issue is created, so each issue's component can
+        # ride along in the create payload instead of a follow-up update (and email).
+        self._jira.ensure_components(self._export.component_names)
 
         issues = self._export.issues[from_issue - 1 : from_issue - 1 + limit if limit is not None else None]
         total = len(self._export.issues)
+        display_names = self._export.display_names
+        jira_user_ids = self._jira.known_user_ids
         for i, bb_issue in enumerate(issues, start=from_issue):
-            comments = [_get_comment_body(comment, self._export.user_display_names) for comment in bb_issue.comments]
-
             jira_issue_details = JiraIssueDetails(
                 key=f"{self._config.board_id}-{bb_issue.id}",
                 summary=bb_issue.summary,
-                description=_get_description(bb_issue, self._export.user_display_names),
+                description=_resolve_mentions(_get_description(bb_issue), display_names, jira_user_ids),
                 issue_type=_get_issue_type(bb_issue),
-                priority_id=_get_priority_id(bb_issue.priority),
-                account_id=_get_user_id(self.valid_user_ids, bb_issue.assignee or ""),
-                reporter_id=_get_user_id(self.valid_user_ids, bb_issue.reporter or ""),
+                priority_id=_get_priority_id(bb_issue),
+                account_id=_get_user_id(self.valid_user_ids, bb_issue.assignee),
+                reporter_id=_get_user_id(self.valid_user_ids, bb_issue.reporter),
                 status=_get_issue_status(bb_issue),
-                comments=comments,
+                comments=[
+                    _resolve_mentions(_get_comment_body(comment), display_names, jira_user_ids)
+                    for comment in bb_issue.comments
+                ],
+                component=bb_issue.component,
             )
 
             jira_issue: Issue
@@ -178,10 +223,15 @@ class BitbucketJiraMigrator:
                 logging.info("Creating issue %d/%d: %s", i, total, bb_issue.summary)
                 jira_issue = self._jira.create_issue(jira_issue_details)
 
-            # Upload inline images and replace URLs with filenames before writing
-            jira_issue_details.description = self._jira.upload_inline_images(jira_issue, jira_issue_details.description)
+            # Attach archived inline images and point the markup at the attachments.
+            images = _inline_images(
+                self._export, bb_issue.id, [jira_issue_details.description, *jira_issue_details.comments]
+            )
+            jira_issue_details.description = self._jira.upload_inline_images(
+                jira_issue, jira_issue_details.description, images
+            )
             jira_issue_details.comments = [
-                self._jira.upload_inline_images(jira_issue, c) for c in jira_issue_details.comments
+                self._jira.upload_inline_images(jira_issue, c, images) for c in jira_issue_details.comments
             ]
 
             try:

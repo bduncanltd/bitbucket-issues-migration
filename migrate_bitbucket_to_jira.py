@@ -1,23 +1,21 @@
-"""Migrates issues from a Bitbucket export zip to an existing Jira project.
+"""Migrates issues from a Bitbucket issue archive to an existing Jira project.
 
-Requirements:
-- Python packages:
-    - jira
-    - colorlog
-    - pyyaml
-    - playwright (for inline image download; run `playwright install chromium` after installing)
+The archive is created by the exporter, which captures issues, comments, attachments,
+and inline images in one pass:
 
-Create a migration_config.yaml file by copying migration_config.example.yaml and filling in your values.
+    python -m bitbucket_export workspace/repo --email you@example.com
 
-Usage:
-    # Save Bitbucket browser session once (opens Chrome for you to log in):
-    python migrate_bitbucket_to_jira.py --config migration_config.yaml --prepare-auth
+Point migration_config.yaml at the archive directory (copy
+migration_config.example.yaml and fill in your values), then:
 
-    # Migrate all issues (with inline image download using saved session):
+    # Migrate all issues:
     python migrate_bitbucket_to_jira.py --config migration_config.yaml
 
     # Migrate first N issues only:
     python migrate_bitbucket_to_jira.py --config migration_config.yaml --limit 3
+
+This script talks only to Jira; everything it needs from Bitbucket is already in the
+archive.
 """
 
 import argparse
@@ -26,9 +24,9 @@ from pathlib import Path
 
 import colorlog
 
-from jira_migration.bitbucket_export import BitbucketExport
+from jira_migration.archive_source import ArchiveSource
 from jira_migration.config import JiraMigrationConfig
-from jira_migration.jira_import import DEFAULT_AUTH_STATE, JiraImport
+from jira_migration.jira_import import JiraImport
 from jira_migration.migrator import BitbucketJiraMigrator
 
 if __name__ == "__main__":
@@ -52,45 +50,16 @@ if __name__ == "__main__":
         dest="from_issue",
         help="Start migration from this issue number (inclusive).",
     )
-    parser.add_argument(
-        "--prepare-auth",
-        action="store_true",
-        help="Open a browser so you can log in to Bitbucket, then save auth state for image downloads.",
-    )
-    parser.add_argument(
-        "--auth-state",
-        type=Path,
-        default=DEFAULT_AUTH_STATE,
-        help=f"Playwright auth state file for Bitbucket image downloads. Default: {DEFAULT_AUTH_STATE}",
-    )
     args = parser.parse_args()
 
-    if args.prepare_auth:
-        from playwright.sync_api import sync_playwright  # type: ignore[import]
+    config = JiraMigrationConfig.from_yaml(args.config)
+    try:
+        source = ArchiveSource(Path(config.archive_dir))
+    # FileNotFoundError: no manifest; ValueError: archive written by an unsupported schema.
+    except (FileNotFoundError, ValueError) as error:
+        logging.error("%s\nCreate the archive first: python -m bitbucket_export <workspace/repo>", error)
+        raise SystemExit(1) from error
 
-        args.auth_state.parent.mkdir(parents=True, exist_ok=True)
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="chrome", headless=False)
-            context = browser.new_context()
-            page = context.new_page()
-            page.goto("https://bitbucket.org/account/signin/", wait_until="load")
-            print("Sign in to Bitbucket in the browser window.")
-            print("When fully logged in, press Enter here to save auth state.")
-            input()
-            context.storage_state(path=str(args.auth_state))
-            context.close()
-            browser.close()
-        logging.info("Saved auth state to %s", args.auth_state)
-    else:
-        auth_state = args.auth_state if args.auth_state.exists() else None
-        if auth_state is None:
-            logging.warning(
-                "No Playwright auth state found — inline images will be skipped. Run with --prepare-auth first."
-            )
-
-        config = JiraMigrationConfig.from_yaml(args.config)
-        bitbucket_export = BitbucketExport(config.export_zip)
-        jira_import = JiraImport(config, auth_state=auth_state)
-
-        migrator = BitbucketJiraMigrator(export=bitbucket_export, jira=jira_import, config=config)
-        migrator.migrate(limit=args.limit, from_issue=args.from_issue)
+    jira_import = JiraImport(config)
+    migrator = BitbucketJiraMigrator(export=source, jira=jira_import, config=config)
+    migrator.migrate(limit=args.limit, from_issue=args.from_issue)

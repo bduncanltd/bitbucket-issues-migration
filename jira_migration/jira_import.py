@@ -7,27 +7,21 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlparse
 
 from jira import JIRA
 from jira.exceptions import JIRAError
 from jira.resources import Comment, Issue, User
-from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import sync_playwright
 
 from jira_migration.config import JiraMigrationConfig
 from jira_migration.jira_issue_details import JiraIssueDetails
-
-DEFAULT_AUTH_STATE = Path.home() / ".cache" / "bitbucket-playwright" / "auth-state.json"
 
 MAX_CREATE_RETRIES = 5
 RESPONSE_404 = 404
 
 
 class JiraImport:
-    def __init__(self, config: JiraMigrationConfig, auth_state: Path | None = None) -> None:
+    def __init__(self, config: JiraMigrationConfig) -> None:
         self._config = config
-        self._auth_state = auth_state
         self._client = JIRA(
             server=config.jira_url,
             basic_auth=(config.jira_email, config.jira_api_token),
@@ -56,6 +50,20 @@ class JiraImport:
     def get_issue(self, issue_key: str) -> Issue:
         return self._client.issue(issue_key)
 
+    def ensure_components(self, names: set[str]) -> None:
+        """Create any project components that do not exist yet.
+
+        Done once up front so components can ride along in the create payload rather
+        than being patched on afterwards, which would send an extra notification per
+        issue.
+        """
+        if not names:
+            return
+        existing = {component.name for component in self._client.project_components(self._config.board_id)}
+        for name in sorted(names - existing):
+            logging.info("Creating component: %s", name)
+            self._client.create_component(name, self._config.board_id)
+
     def sync_comments(self, jira_issue: Issue, details: JiraIssueDetails) -> None:
         """Sync comments by position: edit existing, add extras, delete leftovers."""
         jira_comments: list[Comment] = self._client.comments(jira_issue)
@@ -77,6 +85,8 @@ class JiraImport:
             "issuetype": {"name": details.issue_type},
             "priority": {"id": details.priority_id},
         }
+        if details.component:
+            issue_dict["components"] = [{"name": details.component}]
         if details.account_id:
             issue_dict["assignee"] = {"accountId": details.account_id}
         if details.reporter_id:
@@ -118,58 +128,31 @@ class JiraImport:
                     raise
         raise RuntimeError(f"Issue {key} still not accessible after retries")
 
-    def upload_inline_images(self, jira_issue: Issue, text: str) -> str:
-        """Download Bitbucket-hosted images in wiki markup text, upload to Jira, replace URLs with filenames."""
-        if self._auth_state is None:
-            return text
+    def upload_inline_images(self, jira_issue: Issue, text: str, images: dict[str, tuple[Path, str]]) -> str:
+        """Attach archived images referenced in wiki markup and point the markup at them.
 
-        image_dir = Path(".migration/images")
-        image_dir.mkdir(parents=True, exist_ok=True)
+        ``images`` maps each original Bitbucket URL to (stored file, upload name); the
+        files come straight from the archive, so no network access is involved. URLs
+        not in the map are left untouched.
+        """
+        if not images:
+            return text
 
         existing_names = {a.filename for a in self._client.issue(jira_issue.key).fields.attachment}
 
-        with sync_playwright() as playwright:
-            request_context = playwright.request.new_context(storage_state=str(self._auth_state))
-            try:
+        def replace(m: re.Match[str]) -> str:
+            resolved = images.get(m.group(1))
+            if resolved is None:
+                return m.group(0)  # leave original !url!
+            path, name = resolved
+            if name not in existing_names:
+                logging.info("  Uploading image: %s", name)
+                with open(path, "rb") as f:
+                    self._client.add_attachment(issue=jira_issue, attachment=f, filename=name)
+                existing_names.add(name)
+            return f"!{name}!"
 
-                def replace(m: re.Match[str]) -> str:
-                    url = m.group(1)
-                    filename = Path(urlparse(url).path).name
-                    local_path = image_dir / filename
-
-                    if not local_path.exists():
-                        logging.info("  Downloading image: %s", filename)
-
-                        try:
-                            response = request_context.get(url, fail_on_status_code=False, timeout=30_000)
-                        except PlaywrightError as e:
-                            logging.warning("  TLS/connection failed for %s: %s", url, e)
-                            return m.group(0)  # leave original !url!
-                        except Exception as e:
-                            logging.warning("  Unexpected error for %s: %s", url, e)
-                            return m.group(0)
-
-                        if not response or not response.ok:
-                            logging.warning(
-                                "  Failed to download image %s (HTTP %s)",
-                                url,
-                                getattr(response, "status", "unknown"),
-                            )
-                            return m.group(0)
-
-                        local_path.write_bytes(response.body())
-
-                    if filename not in existing_names:
-                        logging.info("  Uploading image: %s", filename)
-                        with open(local_path, "rb") as f:
-                            self._client.add_attachment(issue=jira_issue, attachment=f, filename=filename)
-                        existing_names.add(filename)
-
-                    return f"!{filename}!"
-
-                return re.sub(r"!(https?://[^!]+)!", replace, text)
-            finally:
-                request_context.dispose()
+        return re.sub(r"!(https?://[^!]+)!", replace, text)
 
     def sync_attachments(self, jira_issue: Issue, attachments: list) -> None:
         """Upload attachments that aren't already on the Jira issue (matched by filename)."""
@@ -190,6 +173,8 @@ class JiraImport:
                 "issuetype": {"name": details.issue_type},
                 "priority": {"id": details.priority_id},
             }
+            if details.component:
+                fields["components"] = [{"name": details.component}]
             if details.account_id:
                 fields["assignee"] = {"accountId": details.account_id}
             if details.reporter_id:

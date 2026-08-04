@@ -14,3 +14,4 @@ class JiraIssueDetails:
     reporter_id: str | None
     status: str
     comments: list[str]
+    component: str | None = None
