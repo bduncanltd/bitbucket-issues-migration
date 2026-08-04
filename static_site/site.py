@@ -171,6 +171,7 @@ def _copy_assets(assets, archive_dir: Path, output_dir: Path) -> int:
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             destination.unlink()
+        try:
             os.link(source, destination)
         except (OSError, NotImplementedError):
             # Different volume, or a filesystem without hardlinks: fall back to a copy.
