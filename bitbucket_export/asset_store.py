@@ -52,6 +52,7 @@ class AssetStore:
             return False
         asset = self.assets.get(asset_id)
         if asset is None:
+            self.asset_index.pop(url, None)
             return False
         if not (self.archive_dir / asset.path).exists():
             self.asset_index.pop(url, None)
@@ -79,7 +80,9 @@ class AssetStore:
             relative_path = self._relative_path(digest, clean_name)
             destination = self.archive_dir / relative_path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(body)
+            tmp = destination.with_name(destination.name + ".tmp")
+            tmp.write_bytes(body)
+            tmp.replace(destination)
             asset = Asset(
                 id=digest,
                 path=relative_path,
